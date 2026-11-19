@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtemp, readdir, readFile, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { combine, SensitiveNames, svgHeight, svgWidth, type Cache, type CollectOptions, type HostActivity, type ShowcaseItem } from "@git-info-combine/core";
+import { CACHE_VERSION, combine, SensitiveNames, svgHeight, svgWidth, type Cache, type CollectOptions, type HostActivity, type ShowcaseItem } from "@git-info-combine/core";
 import { commitAndPush } from "../src/git.ts";
 import { readConfig } from "../src/inputs.ts";
 import { run } from "../src/run.ts";
@@ -20,7 +20,7 @@ const host: HostActivity = {
 function fakeCollect(seen: CollectOptions[]) {
   return async (options: CollectOptions) => {
     seen.push(options);
-    const cache: Cache = { version: 1 };
+    const cache: Cache = { version: CACHE_VERSION };
     return { activity: combine([host], new Date("2026-10-02T00:00:00Z")), mirrored: 0, cache, sensitive: new SensitiveNames() };
   };
 }
@@ -75,7 +75,7 @@ describe("run", () => {
       (name) => ({ "github-token": "a", commit: "false", "output-dir": "cards", "exclude-repos": "x/y" })[name] ?? "",
     );
     await run(config, { workspace, logger: logger(), collect: fakeCollect(seen) });
-    expect(seen[0]!.cache).toEqual({ version: 1, github: { login: "octo", years: {} } });
+    expect(seen[0]!.cache).toMatchObject({ version: CACHE_VERSION, github: { login: "octo", years: {} } });
     expect(seen[0]!.excludeRepos).toEqual(["x/y"]);
     expect(seen[0]!.includeOrgRepos).toBe(true);
   });

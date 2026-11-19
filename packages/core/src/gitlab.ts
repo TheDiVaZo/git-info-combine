@@ -9,6 +9,7 @@ import {
   type LanguageStat,
 } from "./model.ts";
 import { isExcluded, opaqueId, SensitiveNames } from "./privacy.ts";
+import { gitlabInstanceId } from "./sources.ts";
 
 export interface GitLabDay {
   contributions: number;
@@ -159,7 +160,7 @@ export async function fetchGitLab(options: GitLabOptions): Promise<GitLabResult>
   );
   for (const { email } of (await tryGet<{ email: string }[]>("/user/emails"))?.body ?? []) emails.add(email.toLowerCase());
 
-  const instance = opaqueId("gitlab-instance", baseUrl.toLowerCase());
+  const instance = gitlabInstanceId(baseUrl);
   const cached = options.cache?.instance === instance && options.cache.userId === user.id ? options.cache : undefined;
   const detectWordPress = options.detectWordPress !== false;
   const manualMirrors = new Set((options.mirrors ?? []).map((path) => path.trim().toLowerCase()));
