@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtemp, readdir, readFile, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CACHE_VERSION, combine, SensitiveNames, svgHeight, svgWidth, type Cache, type CollectOptions, type HostActivity, type ShowcaseItem } from "@git-info-combine/core";
+import { CACHE_VERSION, combine, SensitiveNames, svgHeight, svgWidth, type Cache, type CollectOptions, type HostActivity, type ShowcaseItem, type ShowcaseOptions } from "@git-info-combine/core";
 import { commitAndPush } from "../src/git.ts";
 import { readConfig } from "../src/inputs.ts";
 import { run } from "../src/run.ts";
@@ -78,6 +78,62 @@ describe("run", () => {
     expect(seen[0]!.cache).toMatchObject({ version: CACHE_VERSION, github: { login: "octo", years: {} } });
     expect(seen[0]!.excludeRepos).toEqual(["x/y"]);
     expect(seen[0]!.includeOrgRepos).toBe(true);
+  });
+
+  test("passes every source to collect and only the selected primary to pins and snippets", async () => {
+    const workspace = await mkdtemp(join(tmpdir(), "gic-"));
+    const sources = [
+      { id: "work", label: "Work", url: "https://work.example", token: "work-token", color: "#fc6d26" },
+      { id: "personal", label: "Personal", url: "https://personal.example", token: "personal-token", color: "#6e49cb" },
+    ];
+    const values: Record<string, string> = {
+      "gitlab-sources": JSON.stringify(sources),
+      "gitlab-primary-source": "personal",
+      commit: "false",
+      theme: "radical",
+      cards: "pins,gists",
+      pins: "gitlab:group/project",
+      gists: "gitlab:42",
+    };
+    const seen: CollectOptions[] = [];
+    const showcase: ShowcaseOptions[] = [];
+    const item: ShowcaseItem = { kind: "repo", host: "gitlab", title: "Public project", path: "group/project", description: null, language: null, stars: 0, forks: 0, archived: false };
+    const config = readConfig((name) => values[name] ?? "");
+    await run(config, {
+      workspace,
+      logger: logger(),
+      collect: fakeCollect(seen),
+      pin: async (_ref, options) => { showcase.push(options); return item; },
+      gist: async (_ref, options) => { showcase.push(options); return { ...item, kind: "gist" }; },
+    });
+    expect(seen[0]!.gitlabSources).toEqual(sources);
+    expect(seen[0]!.gitlabToken).toBeUndefined();
+    expect(showcase).toHaveLength(2);
+    for (const options of showcase) {
+      expect(options.gitlabToken).toBe("personal-token");
+      expect(options.gitlabUrl).toBe("https://personal.example");
+    }
+  });
+
+  test("a collection failure leaves existing cards and cache untouched and never commits", async () => {
+    const workspace = await mkdtemp(join(tmpdir(), "gic-"));
+    const output = join(workspace, "git-info-combine");
+    await mkdir(output);
+    const oldCache = JSON.stringify({ version: 1, github: { login: "octo", years: {} } });
+    await writeFile(join(output, "cache.json"), oldCache);
+    await writeFile(join(output, "stats.svg"), "previous svg");
+    const config = readConfig((name) => ({ "github-token": "a", cards: "stats" })[name] ?? "");
+    let committed = false;
+    await expect(run(config, {
+      workspace,
+      logger: logger(),
+      collect: async () => { throw new Error("GitLab source 2 failed with HTTP 401."); },
+      commit: async () => { committed = true; return true; },
+    })).rejects.toThrow("GitLab source 2 failed");
+    expect(await readFile(join(output, "cache.json"), "utf8")).toBe(oldCache);
+    expect(await readFile(join(output, "stats.svg"), "utf8")).toBe("previous svg");
+    expect((await readdir(output)).sort()).toEqual(["cache.json", "stats.svg"]);
+    expect(committed).toBe(false);
   });
 });
 

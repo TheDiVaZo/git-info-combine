@@ -3,8 +3,14 @@ import { readConfig } from "./inputs.ts";
 import { run } from "./run.ts";
 
 try {
-  const config = readConfig((name) => core.getInput(name));
-  for (const token of [config.githubToken, config.gitlabToken]) if (token) core.setSecret(token);
+  const config = readConfig((name) => {
+    const value = core.getInput(name);
+    if (value && ["github-token", "gitlab-token", "gitlab-sources", "wakatime-api-key"].includes(name)) core.setSecret(value);
+    return value;
+  });
+  for (const token of [config.githubToken, config.gitlabToken, config.wakatime.apiKey, ...(config.gitlabSources ?? []).map((source) => source.token)]) {
+    if (token) core.setSecret(token);
+  }
   const result = await run(config, {
     workspace: process.env.GITHUB_WORKSPACE ?? process.cwd(),
     logger: { info: core.info, warning: core.warning },

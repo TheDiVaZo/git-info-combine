@@ -1,9 +1,11 @@
 import {
   CARD_NAMES,
   parseCards,
+  parseGitLabSources,
   STAT_NAMES,
   type CardName,
   type CardOptions,
+  type GitLabSourceConfig,
   type HeatmapCardOptions,
   type LanguagesCardOptions,
   type StatName,
@@ -20,6 +22,8 @@ export interface Config {
   githubToken?: string;
   gitlabToken?: string;
   gitlabUrl?: string;
+  gitlabSources?: GitLabSourceConfig[];
+  gitlabPrimarySource?: string;
   includeOrgRepos: boolean;
   excludeRepos: string[];
   gitlabMirrors: string[];
@@ -74,7 +78,16 @@ export function readConfig(getInput: GetInput): Config {
 
   const githubToken = text("github-token");
   const gitlabToken = text("gitlab-token");
-  if (!githubToken && !gitlabToken) throw new Error("Set at least one of github-token and gitlab-token.");
+  const gitlabSources = parseGitLabSources(text("gitlab-sources"));
+  if (gitlabToken && gitlabSources !== undefined) throw new Error("Use either gitlab-token or gitlab-sources, not both.");
+  if (!githubToken && !gitlabToken && !gitlabSources?.length) {
+    throw new Error("Set at least one of github-token, gitlab-token and gitlab-sources.");
+  }
+  const cards = parseCards(getInput("cards"));
+  const pins = list("pins");
+  const gists = list("gists");
+  const gitlabPrimarySource = text("gitlab-primary-source");
+  primaryGitLabSource({ gitlabSources, gitlabPrimarySource, cards, pins, gists });
 
   const common: CardOptions = {
     theme: text("theme"),
@@ -100,11 +113,13 @@ export function readConfig(getInput: GetInput): Config {
     githubToken,
     gitlabToken,
     gitlabUrl: text("gitlab-url"),
+    gitlabSources,
+    gitlabPrimarySource,
     includeOrgRepos: bool("include-org-repos", true),
     excludeRepos: list("exclude-repos"),
     gitlabMirrors: list("gitlab-mirrors"),
     detectWordPress: bool("detect-wordpress", true),
-    cards: parseCards(getInput("cards")),
+    cards,
     outputDir: text("output-dir") ?? "git-info-combine",
     commit: bool("commit", true),
     commitMessage: text("commit-message") ?? "chore: update git-info-combine cards",
@@ -143,13 +158,33 @@ export function readConfig(getInput: GetInput): Config {
       count: number("wakatime-count"),
       hide: list("wakatime-hide"),
     },
-    pins: list("pins"),
-    gists: list("gists"),
+    pins,
+    gists,
     showcase: { ...common, showHost: bool("show-hosts", true), hostColors },
   };
 }
 
 export { CARD_NAMES };
+
+/** Selects the one GitLab used for public pins and snippets. */
+export function primaryGitLabSource(
+  config: Pick<Config, "gitlabSources" | "gitlabPrimarySource" | "cards" | "pins" | "gists">,
+): GitLabSourceConfig | undefined {
+  const sources = config.gitlabSources ?? [];
+  if (config.gitlabPrimarySource) {
+    const source = sources.find(({ id }) => id === config.gitlabPrimarySource);
+    if (!source) throw new Error("Input gitlab-primary-source must match an id in gitlab-sources.");
+    return source;
+  }
+  if (sources.length === 1) return sources[0];
+  const hasGitLabShowcase = (["pins", "gists"] as const).some(
+    (card) => config.cards.includes(card) && config[card].some((ref) => /^gitlab:/i.test(ref.trim())),
+  );
+  if (sources.length > 1 && hasGitLabShowcase) {
+    throw new Error("Set gitlab-primary-source to show GitLab pins or gists with multiple GitLab sources.");
+  }
+  return undefined;
+}
 
 /**
  * Parses the `layout` input: one row per line, card names separated by spaces

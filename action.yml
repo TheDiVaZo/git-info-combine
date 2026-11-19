@@ -17,6 +17,12 @@ inputs:
     description: Base URL of the GitLab instance. Set this for self-hosted GitLab.
     required: false
     default: https://gitlab.com
+  gitlab-sources:
+    description: "JSON array of GitLab servers, each with id, url, token, label and hex color; optional mirrors adds GitHub mirror project paths for that server. Labels appear publicly on cards. Use instead of gitlab-token."
+    required: false
+  gitlab-primary-source:
+    description: "The id in gitlab-sources used for GitLab pins and snippets. Required when those cards are requested with multiple servers; a single server is selected automatically."
+    required: false
   include-org-repos:
     description: Count repos in GitHub organisations you belong to towards languages and stars, not only repos you own.
     required: false
@@ -25,7 +31,7 @@ inputs:
     description: Repos or projects (name or owner/name) to leave out of languages and stars. This file is public, so naming a private repo here reveals its name.
     required: false
   gitlab-mirrors:
-    description: GitLab projects (group/project) that mirror GitHub repos, so they count once. Mirrors whose latest commit matches a GitHub repo are found without this. This file is public, so naming a private project here reveals its name.
+    description: GitLab projects (group/project) that mirror GitHub repos, so they count once. Applies to every GitLab source; each source can add its own mirrors. Mirrors whose latest commit matches a GitHub repo are found without this. This file is public, so naming a private project here reveals its name.
     required: false
   detect-wordpress:
     description: Count a repo that bundles WordPress core as one PHP repo, rather than counting WordPress's own code as yours.

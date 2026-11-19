@@ -1,13 +1,15 @@
 /**
  * Fetches real activity and prints a summary. Reads tokens from the
  * environment: GIC_GITHUB_TOKEN, GIC_GITLAB_TOKEN, and optionally GIC_GITLAB_URL
- * and GIC_INCLUDE_ORG_REPOS=false.
+ * and GIC_INCLUDE_ORG_REPOS=false. For multiple GitLab servers, use
+ * GIC_GITLAB_SOURCES (the same JSON array as the Action's gitlab-sources)
+ * instead of GIC_GITLAB_TOKEN.
  * Writes the cache and activity JSON to .out/ so a second run is incremental.
  *
  *   bun run fetch
  */
 import { mkdir } from "node:fs/promises";
-import { collect, parseCache } from "@git-info-combine/core";
+import { collect, parseCache, parseGitLabSources } from "@git-info-combine/core";
 
 const cacheFile = Bun.file(".out/cache.json");
 const cache = parseCache((await cacheFile.exists()) ? await cacheFile.text() : null);
@@ -17,6 +19,7 @@ const { activity, mirrored, cache: next } = await collect({
   githubToken: process.env.GIC_GITHUB_TOKEN,
   gitlabToken: process.env.GIC_GITLAB_TOKEN,
   gitlabUrl: process.env.GIC_GITLAB_URL,
+  gitlabSources: parseGitLabSources(process.env.GIC_GITLAB_SOURCES),
   includeOrgRepos: process.env.GIC_INCLUDE_ORG_REPOS !== "false",
   cache,
 });
@@ -30,12 +33,10 @@ const dates = Object.keys(activity.days);
 console.log(`Fetched in ${seconds}s (${cache ? "incremental" : "full"}).`);
 console.log(`Days with activity: ${dates.length}, from ${dates[0]} to ${dates.at(-1)}`);
 console.log(`GitLab projects counted once as mirrors of GitHub repos: ${mirrored}`);
-console.table(
-  Object.fromEntries([
-    ...activity.hosts.map((host) => [`${host.host} (${host.login})`, { ...host.totals, ...prefix("repos", host.repos) }]),
-    ["combined", activity.totals],
-  ]),
-);
+console.table([
+  ...activity.hosts.map((host) => ({ source: host.source?.label ?? host.host, account: host.login, ...host.totals, ...prefix("repos", host.repos) })),
+  { source: "combined", account: "", ...activity.totals },
+]);
 const totalWeight = Object.values(activity.languages).reduce((sum, stat) => sum + stat.weight, 0);
 const totalSize = Object.values(activity.languages).reduce((sum, stat) => sum + stat.size, 0);
 const languages = Object.entries(activity.languages)

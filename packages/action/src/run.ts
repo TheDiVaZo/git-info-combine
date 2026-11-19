@@ -25,7 +25,7 @@ import {
   type WakaTimeStats,
 } from "@git-info-combine/core";
 import { commitAndPush } from "./git.ts";
-import type { Config } from "./inputs.ts";
+import { primaryGitLabSource, type Config } from "./inputs.ts";
 
 export interface Logger {
   info(message: string): void;
@@ -61,6 +61,7 @@ interface Card {
 
 export async function run(config: Config, deps: RunDeps): Promise<RunResult> {
   const { logger } = deps;
+  const primaryGitLab = primaryGitLabSource(config);
   const outputDir = join(deps.workspace, config.outputDir);
   const cachePath = join(outputDir, CACHE_FILE);
   const cache = parseCache(await readFile(cachePath, "utf8").catch(() => null));
@@ -72,6 +73,7 @@ export async function run(config: Config, deps: RunDeps): Promise<RunResult> {
     githubToken: config.githubToken,
     gitlabToken: config.gitlabToken,
     gitlabUrl: config.gitlabUrl,
+    gitlabSources: config.gitlabSources,
     includeOrgRepos: config.includeOrgRepos,
     excludeRepos: config.excludeRepos,
     gitlabMirrors: config.gitlabMirrors,
@@ -81,14 +83,14 @@ export async function run(config: Config, deps: RunDeps): Promise<RunResult> {
   if (mirrored > 0) logger.info(`${mirrored} GitLab projects mirror GitHub repos and are counted once.`);
   for (const host of activity.hosts) {
     logger.info(
-      `${host.host}: ${host.totals.contributions} contributions, ${host.repos.public} public and ${host.repos.private} private repos.`,
+      `${host.source?.label ?? host.host}: ${host.totals.contributions} contributions, ${host.repos.public} public and ${host.repos.private} private repos.`,
     );
   }
 
   const showcaseOptions: ShowcaseOptions = {
     githubToken: config.githubToken,
-    gitlabToken: config.gitlabToken,
-    gitlabUrl: config.gitlabUrl,
+    gitlabToken: primaryGitLab?.token ?? config.gitlabToken,
+    gitlabUrl: primaryGitLab?.url ?? config.gitlabUrl,
   };
   const cards: Card[] = [];
   for (const card of config.cards) {
