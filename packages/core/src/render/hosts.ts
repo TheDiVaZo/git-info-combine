@@ -1,15 +1,15 @@
-import type { Host, HostActivity } from "../model.ts";
+import type { ActivityHost, Host, HostActivity } from "../model.ts";
 import { DEFAULT_HOST_COLORS, escapeXml, HOST_LABELS, hexColor } from "./svg.ts";
 
 export type HostColors = Partial<Record<Host, string>>;
 
-export function hostColor(host: Host, colors: HostColors = {}): string {
-  const custom = colors[host];
+export function hostColor(host: ActivityHost, colors: HostColors = {}): string {
+  const custom = host === "manual" ? undefined : colors[host];
   return custom ? hexColor(custom, `${HOST_LABELS[host]} colour`) : DEFAULT_HOST_COLORS[host];
 }
 
 /** A row of coloured dots naming each host, for card footers. */
-export function hostLegend(hosts: Host[], colors: HostColors, x: number, y: number): { svg: string; width: number } {
+export function hostLegend(hosts: ActivityHost[], colors: HostColors, x: number, y: number): { svg: string; width: number } {
   let offset = 0;
   const items = hosts.map((host) => {
     const label = HOST_LABELS[host];
@@ -40,6 +40,21 @@ export function resolveSources(hosts: HostActivity[], colors: HostColors = {}): 
     }
     return { id: source.id, label: source.label, color };
   });
+}
+
+export function activityUnit(host: HostActivity): string {
+  return host.host === "manual" ? "local commits" : "API contributions";
+}
+
+/** Explain mixed units without implying that missing local metrics were measured. */
+export function manualActivityDescription(hosts: HostActivity[]): string {
+  if (!hosts.some((host) => host.host === "manual")) return "";
+  const descriptions = hosts.map((host) => {
+    const label = host.source?.label ?? HOST_LABELS[host.host];
+    const timezone = host.source?.timezone ? ` (${host.source.timezone})` : "";
+    return `${label}: ${activityUnit(host)}${timezone}`;
+  });
+  return ` Activity units: ${descriptions.join("; ")}. Source counting rules and date boundaries may differ. Local sources report commits only; other metrics are not reported.`;
 }
 
 /** Conservative widths for the 12px legend font, including wide Unicode characters. */

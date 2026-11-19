@@ -26,6 +26,7 @@ import {
 } from "@git-info-combine/core";
 import { commitAndPush } from "./git.ts";
 import { primaryGitLabSource, type Config } from "./inputs.ts";
+import { loadManualContributions } from "./manual.ts";
 
 export interface Logger {
   info(message: string): void;
@@ -62,6 +63,7 @@ interface Card {
 export async function run(config: Config, deps: RunDeps): Promise<RunResult> {
   const { logger } = deps;
   const primaryGitLab = primaryGitLabSource(config);
+  const manualSources = await loadManualContributions(deps.workspace, config.manualContributionsDir);
   const outputDir = join(deps.workspace, config.outputDir);
   const cachePath = join(outputDir, CACHE_FILE);
   const cache = parseCache(await readFile(cachePath, "utf8").catch(() => null));
@@ -74,6 +76,7 @@ export async function run(config: Config, deps: RunDeps): Promise<RunResult> {
     gitlabToken: config.gitlabToken,
     gitlabUrl: config.gitlabUrl,
     gitlabSources: config.gitlabSources,
+    manualSources,
     includeOrgRepos: config.includeOrgRepos,
     excludeRepos: config.excludeRepos,
     gitlabMirrors: config.gitlabMirrors,
@@ -82,8 +85,9 @@ export async function run(config: Config, deps: RunDeps): Promise<RunResult> {
   });
   if (mirrored > 0) logger.info(`${mirrored} GitLab projects mirror GitHub repos and are counted once.`);
   for (const host of activity.hosts) {
+    const metric = host.host === "manual" ? "local commits" : "contributions";
     logger.info(
-      `${host.source?.label ?? host.host}: ${host.totals.contributions} contributions, ${host.repos.public} public and ${host.repos.private} private repos.`,
+      `${host.source?.label ?? host.host}: ${host.totals.contributions} ${metric}${host.host === "manual" ? "." : `, ${host.repos.public} public and ${host.repos.private} private repos.`}`,
     );
   }
 

@@ -23,6 +23,9 @@ inputs:
   gitlab-primary-source:
     description: "The id in gitlab-sources used for GitLab pins and snippets. Required when those cards are requested with multiple servers; a single server is selected automatically."
     required: false
+  manual-contributions-dir:
+    description: "Workspace-relative directory of manual contribution JSON files. Missing directories are ignored; invalid files fail the run. Can be used without API tokens."
+    required: false
   include-org-repos:
     description: Count repos in GitHub organisations you belong to towards languages and stars, not only repos you own.
     required: false

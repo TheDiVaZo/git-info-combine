@@ -20,6 +20,12 @@
     "packages/core": {
       "name": "@git-info-combine/core",
     },
+    "packages/exporter": {
+      "name": "@git-info-combine/exporter",
+      "dependencies": {
+        "@git-info-combine/core": "workspace:*",
+      },
+    },
   },
   "packages": {
     "@actions/core": ["@actions/core@3.0.1", "", { "dependencies": { "@actions/exec": "^3.0.0", "@actions/http-client": "^4.0.0" } }, "sha512-a6d/Nwahm9fliVGRhdhofo40HjHQasUPusmc7vBfyky+7Z+P2A1J68zyFVaNcEclc/Se+eO595oAr5nwEIoIUA=="],
@@ -33,6 +39,8 @@
     "@git-info-combine/action": ["@git-info-combine/action@workspace:packages/action"],
 
     "@git-info-combine/core": ["@git-info-combine/core@workspace:packages/core"],
+
+    "@git-info-combine/exporter": ["@git-info-combine/exporter@workspace:packages/exporter"],
 
     "@types/bun": ["@types/bun@1.4.2", "", { "dependencies": { "bun-types": "1.4.2" } }, "sha512-GimotNn7+ZV0uVArItBbriZsR1oNf0+WTzPkdcFrzShI7k2norL0uzEaJT8T33dWr7O/c9ZDuAFQrctKCi72oQ=="],
 

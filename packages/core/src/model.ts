@@ -1,6 +1,7 @@
 export type Host = "github" | "gitlab";
+export type ActivityHost = Host | "manual";
 
-/** Date in `YYYY-MM-DD` form (UTC). */
+/** Calendar day in `YYYY-MM-DD` form, using the source's reporting time zone. */
 export type DateKey = string;
 
 export interface Totals {
@@ -63,6 +64,8 @@ export interface ActivitySource {
   /** Explicit public label; never inferred from a self-hosted domain. */
   label: string;
   color: string;
+  metric?: "commits" | "contributions";
+  timezone?: string;
 }
 
 /**
@@ -70,7 +73,7 @@ export interface ActivitySource {
  * nothing private can reach a card or the cache through it.
  */
 export interface HostActivity {
-  host: Host;
+  host: ActivityHost;
   /** Absent on legacy activity; renderers then use the provider's label and colour. */
   source?: ActivitySource;
   login: string;

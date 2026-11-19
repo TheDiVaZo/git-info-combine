@@ -10,6 +10,7 @@
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "fetch": "bun scripts/fetch.ts",
+    "export:local": "bun packages/exporter/src/index.ts",
     "render": "bun scripts/render.ts",
     "preview": "bun scripts/preview.ts"
   },

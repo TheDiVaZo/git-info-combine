@@ -24,6 +24,7 @@ export interface Config {
   gitlabUrl?: string;
   gitlabSources?: GitLabSourceConfig[];
   gitlabPrimarySource?: string;
+  manualContributionsDir?: string;
   includeOrgRepos: boolean;
   excludeRepos: string[];
   gitlabMirrors: string[];
@@ -47,7 +48,7 @@ export interface Config {
   showcase: ShowcaseCardOptions;
 }
 
-/** Reads the Action's inputs. Every input is optional except a token. */
+/** Reads the Action's inputs. At least one automatic or manual source is required. */
 export function readConfig(getInput: GetInput): Config {
   const text = (name: string) => getInput(name).trim() || undefined;
   const list = (name: string) =>
@@ -79,9 +80,10 @@ export function readConfig(getInput: GetInput): Config {
   const githubToken = text("github-token");
   const gitlabToken = text("gitlab-token");
   const gitlabSources = parseGitLabSources(text("gitlab-sources"));
+  const manualContributionsDir = text("manual-contributions-dir");
   if (gitlabToken && gitlabSources !== undefined) throw new Error("Use either gitlab-token or gitlab-sources, not both.");
-  if (!githubToken && !gitlabToken && !gitlabSources?.length) {
-    throw new Error("Set at least one of github-token, gitlab-token and gitlab-sources.");
+  if (!githubToken && !gitlabToken && !gitlabSources?.length && !manualContributionsDir) {
+    throw new Error("Set at least one of github-token, gitlab-token, gitlab-sources or manual-contributions-dir.");
   }
   const cards = parseCards(getInput("cards"));
   const pins = list("pins");
@@ -115,6 +117,7 @@ export function readConfig(getInput: GetInput): Config {
     gitlabUrl: text("gitlab-url"),
     gitlabSources,
     gitlabPrimarySource,
+    manualContributionsDir,
     includeOrgRepos: bool("include-org-repos", true),
     excludeRepos: list("exclude-repos"),
     gitlabMirrors: list("gitlab-mirrors"),

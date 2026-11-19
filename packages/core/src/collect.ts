@@ -3,6 +3,7 @@ import { fetchGitHub, type GitHubCache } from "./github.ts";
 import { fetchGitLab, type GitLabCache } from "./gitlab.ts";
 import { HttpError, type HttpOptions } from "./http.ts";
 import type { CombinedActivity, HostActivity } from "./model.ts";
+import { manualActivity, validateManualContribution, type ManualContributionDocument } from "./manual.ts";
 import { SensitiveNames } from "./privacy.ts";
 import { gitlabInstanceId, normalizeGitLabSources, type GitLabSourceConfig } from "./sources.ts";
 
@@ -21,6 +22,8 @@ export interface CollectOptions extends HttpOptions {
   gitlabUrl?: string;
   /** Cannot be combined with gitlabToken. */
   gitlabSources?: GitLabSourceConfig[];
+  /** Complete local snapshots; never added incrementally to the API cache. */
+  manualSources?: ManualContributionDocument[];
   /** See GitHubOptions.includeOrgRepos. */
   includeOrgRepos?: boolean;
   /** Repos or projects to leave out of languages and stars, on any host. */
@@ -48,7 +51,15 @@ export async function collect(options: CollectOptions): Promise<Collected> {
     throw new Error("Use either gitlab-token or gitlab-sources, not both.");
   }
   const sources = options.gitlabSources === undefined ? undefined : normalizeGitLabSources(options.gitlabSources);
-  if (!options.githubToken && !options.gitlabToken && !sources?.length) {
+  if (options.manualSources !== undefined && !Array.isArray(options.manualSources)) {
+    throw new Error("Manual contributions must be an array of documents.");
+  }
+  const manual = (options.manualSources ?? []).map(validateManualContribution);
+  if (new Set(manual.map((document) => document.source.id)).size !== manual.length) {
+    throw new Error("Manual contributions contain duplicate source identifiers.");
+  }
+  if (!options.githubToken && !options.gitlabToken && !sources?.length && !manual.length) {
+    if (options.manualSources !== undefined) throw new Error("No automatic or manual activity sources are configured.");
     throw new Error("Set at least one of github-token, gitlab-token and gitlab-sources.");
   }
   const hosts: HostActivity[] = [];
@@ -102,6 +113,7 @@ export async function collect(options: CollectOptions): Promise<Collected> {
     }
   }
 
+  hosts.push(...manual.map(manualActivity));
   const activity = combine(hosts, options.now);
   sensitive.assertAbsent(activity, "the activity data");
   sensitive.assertAbsent(cache, "the cache");

@@ -1,5 +1,5 @@
 import type { CombinedActivity, Totals } from "../model.ts";
-import { hostLegend, resolveSources, sourceLegend, type HostColors } from "./hosts.ts";
+import { hostLegend, manualActivityDescription, resolveSources, sourceLegend, type HostColors } from "./hosts.ts";
 import { ICONS, type IconName } from "./icons.ts";
 import { calculateRank } from "./rank.ts";
 import { formatNumber, renderFrame, titleOffset, type CardOptions } from "./svg.ts";
@@ -31,7 +31,7 @@ const LINE_HEIGHT = 25;
 
 export function renderStatsCard(activity: CombinedActivity, options: StatsCardOptions = {}): string {
   const totals: Totals = activity.totals;
-  const name = options.name ?? (activity.hosts.find((h) => h.host === "github") ?? activity.hosts[0])?.login ?? "";
+  const name = options.name ?? (activity.hosts.find((h) => h.host === "github") ?? activity.hosts.find((h) => h.login))?.login ?? "";
   const rows = STAT_NAMES.filter((stat) => !options.hide?.includes(stat));
   const showRank = !options.hideRank;
   const showHosts = options.showHosts !== false && activity.hosts.length > 0;
@@ -39,7 +39,7 @@ export function renderStatsCard(activity: CombinedActivity, options: StatsCardOp
   const width = options.width ?? (showRank ? 450 : 300);
   const top = titleOffset(options);
   const rowsHeight = rows.length * LINE_HEIGHT;
-  const sourceAware = activity.hosts.some((host) => host.source);
+  const sourceAware = activity.hosts.some((host) => host.source || host.host === "manual");
   const stackedRank = sourceAware && showRank && width < 400;
   const contentHeight = stackedRank ? rowsHeight + 100 : Math.max(rowsHeight, showRank ? 100 : 0);
   const sources = resolveSources(activity.hosts, options.hostColors);
@@ -87,12 +87,13 @@ export function renderStatsCard(activity: CombinedActivity, options: StatsCardOp
   }
 
   const description = rows.map((stat) => `${ROWS[stat].label} ${totals[stat]}`).join(", ") + rankText
-    + (sourceAware && showHosts ? `. Sources: ${sources.map((source) => source.label).join(", ")}.` : "");
+    + (sourceAware && showHosts ? `. Sources: ${sources.map((source) => source.label).join(", ")}.` : "")
+    + manualActivityDescription(activity.hosts);
   return renderFrame({
     ...options,
     width,
     height,
-    title: `${name}'s Git Stats`,
+    title: name ? `${name}'s Git Stats` : "Git Activity Stats",
     description,
     body: body.join(""),
   });

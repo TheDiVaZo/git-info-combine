@@ -1,6 +1,7 @@
 export { CARD_NAMES, parseCards, type CardName } from "./cards.ts";
 export { CACHE_VERSION, collect, parseCache, type Cache, type CollectOptions, type Collected } from "./collect.ts";
 export { combine } from "./combine.ts";
+export { validateManualContribution, parseManualContribution, manualSourceColor, type ManualContributionDocument } from "./manual.ts";
 export { fetchGitHub, type GitHubCache, type GitHubOptions } from "./github.ts";
 export { fetchGitLab, type GitLabCache, type GitLabOptions } from "./gitlab.ts";
 export { HttpError } from "./http.ts";

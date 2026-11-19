@@ -1,6 +1,6 @@
 import { addDays, toDateKey, type CombinedActivity, type DateKey } from "../model.ts";
-import { hostLegend, resolveSources, sourceLegend, type HostColors } from "./hosts.ts";
-import { formatNumber, renderFrame, titleOffset, type CardOptions } from "./svg.ts";
+import { activityUnit, hostLegend, manualActivityDescription, resolveSources, sourceLegend, type HostColors } from "./hosts.ts";
+import { escapeXml, formatNumber, renderFrame, titleOffset, type CardOptions } from "./svg.ts";
 
 export interface HeatmapCardOptions extends CardOptions {
   /** `last-year` (the default) shows 53 weeks; `all` shows every calendar year, newest first. */
@@ -31,9 +31,20 @@ export function renderHeatmapCard(activity: CombinedActivity, options: HeatmapCa
   const mode = options.mode ?? "hosts";
   const hosts = activity.hosts.map((h) => h.host);
   const sources = resolveSources(activity.hosts, options.hostColors);
-  const sourceAware = activity.hosts.some((h) => h.source);
+  const hasManual = activity.hosts.some((host) => host.host === "manual");
+  const sourceAware = hasManual || activity.hosts.some((h) => h.source);
   const colors = Object.fromEntries(sources.map((source) => [source.id, source.color]));
   const single = "var(--icon)";
+  const unit = hasManual ? "activity units" : "contributions";
+
+  const tooltip = (date: DateKey, total: number): string => {
+    if (!hasManual) return "";
+    const parts = activity.hosts.map((host, index) => {
+      const timezone = host.source?.timezone ? ` (${host.source.timezone})` : "";
+      return `${sources[index]!.label}: ${formatNumber(host.days[date] ?? 0, "long")} ${activityUnit(host)}${timezone}`;
+    });
+    return `<title>${escapeXml(`${date}: ${formatNumber(total, "long")} activity units. ${parts.join("; ")}.`)}</title>`;
+  };
 
   const days = (date: DateKey): Day => {
     const bySource = activity.hosts
@@ -90,14 +101,20 @@ export function renderHeatmapCard(activity: CombinedActivity, options: HeatmapCa
 
       const day = days(date);
       blockTotal += day.total;
+      const details = tooltip(date, day.total);
       if (day.total === 0) {
-        empty.push(`M${x} ${y}h${CELL}v${CELL}h-${CELL}z`);
+        if (hasManual) {
+          filled.push(`<rect x="${x}" y="${y}" width="${CELL}" height="${CELL}" fill="var(--text)" fill-opacity="0.12">${details}</rect>`);
+        } else {
+          empty.push(`M${x} ${y}h${CELL}v${CELL}h-${CELL}z`);
+        }
         continue;
       }
       const opacity = OPACITY[level(day.total)];
       if (mode === "single" || day.bySource.length === 1) {
         const fill = mode === "single" ? single : colors[day.bySource[0]![0]];
-        filled.push(`<rect x="${x}" y="${y}" width="${CELL}" height="${CELL}" rx="2" fill="${fill}" fill-opacity="${opacity}"/>`);
+        const rect = `<rect x="${x}" y="${y}" width="${CELL}" height="${CELL}" rx="2" fill="${fill}" fill-opacity="${opacity}"`;
+        filled.push(details ? `${rect}>${details}</rect>` : `${rect}/>`);
       } else {
         // Round cumulative boundaries so small segments never accumulate past the cell.
         let offset = 0;
@@ -110,7 +127,7 @@ export function renderHeatmapCard(activity: CombinedActivity, options: HeatmapCa
           offset = boundary;
           return part;
         });
-        filled.push(`<g fill-opacity="${opacity}">${parts.join("")}</g>`);
+        filled.push(`<g fill-opacity="${opacity}">${details}${parts.join("")}</g>`);
       }
     }
 
@@ -118,19 +135,19 @@ export function renderHeatmapCard(activity: CombinedActivity, options: HeatmapCa
     width = Math.max(width, options.width ?? 0, LEFT + columns * STEP + 25);
     if (block.label) {
       body.push(`<text class="text bold" x="25" y="${y0 - 6}">${block.label}</text>`);
-      body.push(`<text class="small" x="${25 + 45}" y="${y0 - 6}">${formatNumber(blockTotal, "long")} contributions</text>`);
+      body.push(`<text class="small" x="${25 + 45}" y="${y0 - 6}">${formatNumber(blockTotal, "long")} ${unit}</text>`);
     }
     for (const [row, name] of [[1, "Mon"], [3, "Wed"], [5, "Fri"]] as const) {
       body.push(`<text class="small" x="${LEFT - LABELS}" y="${y0 + 15 + row * STEP + 9}">${name}</text>`);
     }
-    body.push(`<path d="${empty.join("")}" fill="var(--text)" fill-opacity="0.12"/>`);
+    if (!hasManual) body.push(`<path d="${empty.join("")}" fill="var(--text)" fill-opacity="0.12"/>`);
     body.push(...filled);
   });
 
   const legendY = blocks.length * blockHeight + blocks.filter((block) => block.label).length * 20 + 10;
   const scaleX = width - 25 - 5 * STEP - 70;
   let scaleY = legendY;
-  if (mode === "hosts") {
+  if (mode === "hosts" || hasManual) {
     if (sourceAware) {
       const legend = sourceLegend(sources, 25, legendY, width - 50);
       body.push(legend.svg);
@@ -153,8 +170,8 @@ export function renderHeatmapCard(activity: CombinedActivity, options: HeatmapCa
   const since = blocks.at(-1)!.start.slice(0, 4);
   const title =
     range === "all"
-      ? `${formatNumber(total, "long")} contributions since ${since}`
-      : `${formatNumber(total, "long")} contributions in the last year`;
+      ? `${formatNumber(total, "long")} ${unit} since ${since}`
+      : `${formatNumber(total, "long")} ${unit} in the last year`;
   const hostNames = sources.map((source) => source.label).join(" and ");
 
   return renderFrame({
@@ -162,7 +179,7 @@ export function renderHeatmapCard(activity: CombinedActivity, options: HeatmapCa
     width,
     height: top + scaleY + 20,
     title,
-    description: `Contribution calendar combining ${hostNames}: ${title}.`,
+    description: `${hasManual ? "Activity" : "Contribution"} calendar combining ${hostNames}: ${title}.${manualActivityDescription(activity.hosts)}`,
     body: body.join(""),
   });
 }

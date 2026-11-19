@@ -7,8 +7,8 @@ export function combine(hosts: HostActivity[], now = new Date()): CombinedActivi
   const languages: Record<string, LanguageStat> = {};
 
   for (const host of hosts) {
-    for (const [date, count] of Object.entries(host.days)) days[date] = (days[date] ?? 0) + count;
-    for (const key of Object.keys(totals) as (keyof Totals)[]) totals[key] += host.totals[key];
+    for (const [date, count] of Object.entries(host.days)) days[date] = addCount(days[date] ?? 0, count);
+    for (const key of Object.keys(totals) as (keyof Totals)[]) totals[key] = addCount(totals[key], host.totals[key]);
     for (const [name, stat] of Object.entries(host.languages)) {
       const combined = (languages[name] ??= { size: 0, weight: 0, repos: 0, color: null });
       combined.size += stat.size;
@@ -19,6 +19,14 @@ export function combine(hosts: HostActivity[], now = new Date()): CombinedActivi
   }
 
   return { generatedAt: now.toISOString(), hosts, days: sortKeys(days), totals, languages };
+}
+
+function addCount(current: number, count: number): number {
+  const total = current + count;
+  if (!Number.isSafeInteger(count) || count < 0 || !Number.isSafeInteger(total)) {
+    throw new Error("Activity counts must stay within the non-negative safe integer range.");
+  }
+  return total;
 }
 
 function sortKeys<T>(record: Record<string, T>): Record<string, T> {

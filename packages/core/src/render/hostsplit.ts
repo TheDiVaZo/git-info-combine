@@ -1,5 +1,5 @@
 import type { CombinedActivity, Totals } from "../model.ts";
-import { resolveSources, sourceLegend, type HostColors } from "./hosts.ts";
+import { manualActivityDescription, resolveSources, sourceLegend, type HostColors } from "./hosts.ts";
 import { escapeXml, formatNumber, renderFrame, titleOffset, type CardOptions } from "./svg.ts";
 
 export interface HostSplitCardOptions extends CardOptions {
@@ -20,7 +20,9 @@ export function renderHostSplitCard(activity: CombinedActivity, options: HostSpl
   const width = options.width ?? 300;
   const top = titleOffset(options);
   const sources = resolveSources(activity.hosts, options.hostColors);
-  const sourceAware = activity.hosts.some((host) => host.source);
+  const hasManual = activity.hosts.some((host) => host.host === "manual");
+  const sourceAware = hasManual || activity.hosts.some((host) => host.source);
+  const unit = hasManual ? "activity" : "contributions";
   const share = (key: keyof Totals) => {
     const total = activity.hosts.reduce((sum, h) => sum + h.totals[key], 0);
     return activity.hosts.map((h, index) => ({ source: sources[index]!, value: h.totals[key], percent: total ? (h.totals[key] / total) * 100 : 0 }));
@@ -45,7 +47,7 @@ export function renderHostSplitCard(activity: CombinedActivity, options: HostSpl
   }
   body.push(
     `<text class="text bold" x="${cx}" y="${cy - 1}" text-anchor="middle">${formatNumber(activity.totals.contributions)}</text>`,
-    `<text class="small" x="${cx}" y="${cy + 13}" text-anchor="middle" style="font-size:9px">contributions</text>`,
+    `<text class="small" x="${cx}" y="${cy + 13}" text-anchor="middle" style="font-size:9px">${unit}</text>`,
   );
   let metricY = 2 * radius + 24;
   if (sourceAware) {
@@ -98,9 +100,9 @@ export function renderHostSplitCard(activity: CombinedActivity, options: HostSpl
 
   const height = top + metricY - 5;
   const description = [
-    ...share("contributions").map((p) => `${p.source.label} ${p.percent.toFixed(0)}% of contributions`),
+    ...share("contributions").map((p) => `${p.source.label} ${p.percent.toFixed(0)}% of ${unit}`),
     ...METRICS.map(({ key, label }) => `${label}: ${share(key).map((p) => `${p.source.label} ${p.value}`).join(", ")}`),
-  ].join(". ");
+  ].join(". ") + manualActivityDescription(activity.hosts);
 
   return renderFrame({
     ...options,

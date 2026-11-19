@@ -1,0 +1,9 @@
+{
+  "name": "@git-info-combine/exporter",
+  "private": true,
+  "type": "module",
+  "exports": "./src/export.ts",
+  "dependencies": {
+    "@git-info-combine/core": "workspace:*"
+  }
+}

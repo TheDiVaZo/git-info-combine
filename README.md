@@ -150,6 +150,20 @@ Stats and languages combine all configured sources. Heatmap segments and the hos
 
 Each server has an independent cache. Existing single-server caches are migrated without dropping their saved history. Changing a token, label, colour or source order keeps that history; changing the account starts a fresh cache for that server. Temporarily removed sources keep their cached history but contribute nothing until configured again. If any source fails, the run fails before updating cards or the cache, leaving the previous output in place.
 
+### Manual activity from local repositories
+
+Use `manual-contributions-dir: contributions/manual` to combine reviewed local Git exports with the existing GitHub and multiple-GitLab integrations. The directory is relative to the Action workspace. Missing directories are ignored; invalid JSON fails the run before any cards or cache are replaced. A manual-only run needs no API token.
+
+The separate local exporter reads your existing repositories without fetching or changing them:
+
+```sh
+bun run export:local --config .contributions.local.json --output-dir ../profile/contributions/manual
+```
+
+Each logical source produces one deterministic JSON file containing its public name, time zone and daily commit counts. The exporter does not publish anything. Get the appropriate permission before publishing corporate statistics, and keep the config with local paths and author emails ignored by Git.
+
+Manual sources reuse the same cards, legends and themes. Local commits are distinct from API contributions; mixed heatmaps call the sum activity units. For a green summed grid, use `heatmap-mode: single` and `icon-color: 40c463`; `hosts` mode gives sources separate colored segments. See [local export, configuration and counting rules](docs/manual-contributions.md), including split sources and PowerShell integration.
+
 ## How things are counted
 
 - **Contributions** (the heatmap) are GitHub's own contribution calendar plus GitLab's events, counted the way GitLab's calendar counts them.
@@ -175,7 +189,7 @@ Configure at least one GitHub or GitLab source. All other inputs are optional. S
 
 | Area | Inputs |
 |---|---|
-| Sources | `github-token`, `gitlab-token`, `gitlab-url`, `gitlab-sources`, `gitlab-primary-source`, `include-org-repos`, `exclude-repos`, `gitlab-mirrors`, `detect-wordpress`, `wakatime-api-key`, `wakatime-url`, `pins`, `gists` |
+| Sources | `github-token`, `gitlab-token`, `gitlab-url`, `gitlab-sources`, `gitlab-primary-source`, `manual-contributions-dir`, `include-org-repos`, `exclude-repos`, `gitlab-mirrors`, `detect-wordpress`, `wakatime-api-key`, `wakatime-url`, `pins`, `gists` |
 | Output | `cards`, `output-dir`, `commit`, `commit-message`, `equal-heights`, `layout`, `layout-width`, `layout-gap` |
 | Look | `theme` (`auto` or any [GitHub Stats Extended theme](https://github.com/stats-organization/github-stats-extended/blob/master/apps/frontend/src/content/docs/docs/customization/themes.md)), `hide-title`, `hide-border`, `border-radius`, `title-color`, `icon-color`, `text-color`, `bg-color`, `border-color`, `github-color`, `gitlab-color` |
 | Stats | `name`, `stats-hide`, `hide-rank`, `show-hosts`, `number-format` |
