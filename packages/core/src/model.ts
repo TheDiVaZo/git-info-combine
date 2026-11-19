@@ -56,12 +56,23 @@ export function addRepoLanguages(
   }
 }
 
+/** Public presentation settings for one independently collected server. */
+export interface ActivitySource {
+  /** Opaque server identity, independent of credentials and display settings. */
+  id: string;
+  /** Explicit public label; never inferred from a self-hosted domain. */
+  label: string;
+  color: string;
+}
+
 /**
- * Activity for one host. It holds no repo, project, gist or snippet names, so
+ * Activity for one source. It holds no repo, project, gist or snippet names, so
  * nothing private can reach a card or the cache through it.
  */
 export interface HostActivity {
   host: Host;
+  /** Absent on legacy activity; renderers then use the provider's label and colour. */
+  source?: ActivitySource;
   login: string;
   days: Record<DateKey, number>;
   totals: Totals;

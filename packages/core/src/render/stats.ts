@@ -1,5 +1,5 @@
 import type { CombinedActivity, Totals } from "../model.ts";
-import { hostLegend, type HostColors } from "./hosts.ts";
+import { hostLegend, resolveSources, sourceLegend, type HostColors } from "./hosts.ts";
 import { ICONS, type IconName } from "./icons.ts";
 import { calculateRank } from "./rank.ts";
 import { formatNumber, renderFrame, titleOffset, type CardOptions } from "./svg.ts";
@@ -39,8 +39,17 @@ export function renderStatsCard(activity: CombinedActivity, options: StatsCardOp
   const width = options.width ?? (showRank ? 450 : 300);
   const top = titleOffset(options);
   const rowsHeight = rows.length * LINE_HEIGHT;
-  const legendHeight = showHosts ? 30 : 0;
-  const height = Math.max(top + rowsHeight + legendHeight, showRank ? 175 : 0, options.minHeight ?? 0);
+  const sourceAware = activity.hosts.some((host) => host.source);
+  const stackedRank = sourceAware && showRank && width < 400;
+  const contentHeight = stackedRank ? rowsHeight + 100 : Math.max(rowsHeight, showRank ? 100 : 0);
+  const sources = resolveSources(activity.hosts, options.hostColors);
+  const legend = showHosts
+    ? sourceAware
+      ? sourceLegend(sources, 25, contentHeight + 12, width - 50)
+      : { ...hostLegend(activity.hosts.map((h) => h.host), options.hostColors ?? {}, 25, rowsHeight + 12), height: 22 }
+    : { svg: "", height: 0 };
+  const legendHeight = showHosts ? legend.height + 8 : 0;
+  const height = Math.max(top + (sourceAware ? contentHeight : rowsHeight) + legendHeight, showRank ? 175 : 0, options.minHeight ?? 0);
 
   const body: string[] = [];
   rows.forEach((stat, i) => {
@@ -56,12 +65,6 @@ export function renderStatsCard(activity: CombinedActivity, options: StatsCardOp
   });
 
   if (showHosts) {
-    const legend = hostLegend(
-      activity.hosts.map((h) => h.host),
-      options.hostColors ?? {},
-      25,
-      rowsHeight + 12,
-    );
     body.push(legend.svg);
   }
 
@@ -71,8 +74,8 @@ export function renderStatsCard(activity: CombinedActivity, options: StatsCardOp
     const radius = 40;
     const circumference = 2 * Math.PI * radius;
     const progress = Math.max(0, Math.min(100, 100 - rank.percentile));
-    const cx = width - 85;
-    const cy = (height - top) / 2 - 18;
+    const cx = stackedRank ? width / 2 : width - 85;
+    const cy = sourceAware ? (stackedRank ? rowsHeight + 40 : contentHeight / 2) : (height - top) / 2 - 18;
     body.push(
       `<g transform="translate(${cx} ${cy})">`,
       `<circle r="${radius}" stroke="var(--icon)" stroke-opacity="0.2" stroke-width="6" fill="none"/>`,
@@ -83,7 +86,8 @@ export function renderStatsCard(activity: CombinedActivity, options: StatsCardOp
     rankText = `, rank ${rank.level}`;
   }
 
-  const description = rows.map((stat) => `${ROWS[stat].label} ${totals[stat]}`).join(", ") + rankText;
+  const description = rows.map((stat) => `${ROWS[stat].label} ${totals[stat]}`).join(", ") + rankText
+    + (sourceAware && showHosts ? `. Sources: ${sources.map((source) => source.label).join(", ")}.` : "");
   return renderFrame({
     ...options,
     width,

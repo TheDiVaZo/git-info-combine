@@ -1,5 +1,5 @@
-import { addDays, toDateKey, type CombinedActivity, type DateKey, type Host } from "../model.ts";
-import { hostColor, hostLegend, type HostColors } from "./hosts.ts";
+import { addDays, toDateKey, type CombinedActivity, type DateKey } from "../model.ts";
+import { hostLegend, resolveSources, sourceLegend, type HostColors } from "./hosts.ts";
 import { formatNumber, renderFrame, titleOffset, type CardOptions } from "./svg.ts";
 
 export interface HeatmapCardOptions extends CardOptions {
@@ -22,7 +22,7 @@ const OPACITY = [0, 0.4, 0.6, 0.8, 1];
 
 interface Day {
   total: number;
-  byHost: [Host, number][];
+  bySource: [string, number][];
 }
 
 export function renderHeatmapCard(activity: CombinedActivity, options: HeatmapCardOptions = {}): string {
@@ -30,14 +30,16 @@ export function renderHeatmapCard(activity: CombinedActivity, options: HeatmapCa
   const range = options.range ?? "last-year";
   const mode = options.mode ?? "hosts";
   const hosts = activity.hosts.map((h) => h.host);
-  const colors = Object.fromEntries(hosts.map((host) => [host, hostColor(host, options.hostColors)])) as Record<Host, string>;
+  const sources = resolveSources(activity.hosts, options.hostColors);
+  const sourceAware = activity.hosts.some((h) => h.source);
+  const colors = Object.fromEntries(sources.map((source) => [source.id, source.color]));
   const single = "var(--icon)";
 
   const days = (date: DateKey): Day => {
-    const byHost = activity.hosts
-      .map((h) => [h.host, h.days[date] ?? 0] as [Host, number])
+    const bySource = activity.hosts
+      .map((h, index) => [sources[index]!.id, h.days[date] ?? 0] as [string, number])
       .filter(([, count]) => count > 0);
-    return { total: byHost.reduce((sum, [, count]) => sum + count, 0), byHost };
+    return { total: bySource.reduce((sum, [, count]) => sum + count, 0), bySource };
   };
 
   const blocks: { start: DateKey; end: DateKey; label?: string }[] = [];
@@ -93,16 +95,19 @@ export function renderHeatmapCard(activity: CombinedActivity, options: HeatmapCa
         continue;
       }
       const opacity = OPACITY[level(day.total)];
-      if (mode === "single" || day.byHost.length === 1) {
-        const fill = mode === "single" ? single : colors[day.byHost[0]![0]];
+      if (mode === "single" || day.bySource.length === 1) {
+        const fill = mode === "single" ? single : colors[day.bySource[0]![0]];
         filled.push(`<rect x="${x}" y="${y}" width="${CELL}" height="${CELL}" rx="2" fill="${fill}" fill-opacity="${opacity}"/>`);
       } else {
-        // Stack each host's share of the day, top to bottom, in host order.
+        // Round cumulative boundaries so small segments never accumulate past the cell.
         let offset = 0;
-        const parts = day.byHost.map(([host, count], index) => {
-          const height = index === day.byHost.length - 1 ? CELL - offset : Math.round((count / day.total) * CELL * 10) / 10;
-          const part = `<rect x="${x}" y="${(y + offset).toFixed(1)}" width="${CELL}" height="${height.toFixed(1)}" fill="${colors[host]}"/>`;
-          offset += height;
+        let cumulative = 0;
+        const parts = day.bySource.map(([source, count], index) => {
+          cumulative += count;
+          const boundary = index === day.bySource.length - 1 ? CELL : Math.round((cumulative / day.total) * CELL * 10) / 10;
+          const height = boundary - offset;
+          const part = `<rect x="${x}" y="${(y + offset).toFixed(1)}" width="${CELL}" height="${height.toFixed(1)}" fill="${colors[source]}"/>`;
+          offset = boundary;
           return part;
         });
         filled.push(`<g fill-opacity="${opacity}">${parts.join("")}</g>`);
@@ -123,30 +128,39 @@ export function renderHeatmapCard(activity: CombinedActivity, options: HeatmapCa
   });
 
   const legendY = blocks.length * blockHeight + blocks.filter((block) => block.label).length * 20 + 10;
-  if (mode === "hosts") body.push(hostLegend(hosts, options.hostColors ?? {}, 25, legendY).svg);
   const scaleX = width - 25 - 5 * STEP - 70;
-  body.push(`<text class="small" x="${scaleX}" y="${legendY}">Less</text>`);
+  let scaleY = legendY;
+  if (mode === "hosts") {
+    if (sourceAware) {
+      const legend = sourceLegend(sources, 25, legendY, width - 50);
+      body.push(legend.svg);
+      if (legend.height > 22 || legend.width > scaleX - 25 - 14) scaleY += legend.height;
+    } else {
+      body.push(hostLegend(hosts, options.hostColors ?? {}, 25, legendY).svg);
+    }
+  }
+  body.push(`<text class="small" x="${scaleX}" y="${scaleY}">Less</text>`);
   OPACITY.forEach((opacity, i) => {
     const x = scaleX + 32 + i * STEP;
     body.push(
       i === 0
-        ? `<rect x="${x}" y="${legendY - 9}" width="${CELL}" height="${CELL}" rx="2" fill="var(--text)" fill-opacity="0.12"/>`
-        : `<rect x="${x}" y="${legendY - 9}" width="${CELL}" height="${CELL}" rx="2" fill="${mode === "single" ? single : "var(--text)"}" fill-opacity="${opacity}"/>`,
+        ? `<rect x="${x}" y="${scaleY - 9}" width="${CELL}" height="${CELL}" rx="2" fill="var(--text)" fill-opacity="0.12"/>`
+        : `<rect x="${x}" y="${scaleY - 9}" width="${CELL}" height="${CELL}" rx="2" fill="${mode === "single" ? single : "var(--text)"}" fill-opacity="${opacity}"/>`,
     );
   });
-  body.push(`<text class="small" x="${scaleX + 32 + 5 * STEP + 3}" y="${legendY}">More</text>`);
+  body.push(`<text class="small" x="${scaleX + 32 + 5 * STEP + 3}" y="${scaleY}">More</text>`);
 
   const since = blocks.at(-1)!.start.slice(0, 4);
   const title =
     range === "all"
       ? `${formatNumber(total, "long")} contributions since ${since}`
       : `${formatNumber(total, "long")} contributions in the last year`;
-  const hostNames = hosts.map((host) => (host === "github" ? "GitHub" : "GitLab")).join(" and ");
+  const hostNames = sources.map((source) => source.label).join(" and ");
 
   return renderFrame({
     ...options,
     width,
-    height: top + legendY + 20,
+    height: top + scaleY + 20,
     title,
     description: `Contribution calendar combining ${hostNames}: ${title}.`,
     body: body.join(""),
