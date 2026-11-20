@@ -21,7 +21,8 @@ export class HttpError extends Error {
 
 const RETRY_STATUSES = new Set([429, 500, 502, 503, 504]);
 
-async function wait(ms: number, signal: AbortSignal | null | undefined, sleep?: HttpOptions["sleep"]): Promise<void> {
+/** Abortable wait shared by HTTP retries and provider polling. */
+export async function wait(ms: number, signal: AbortSignal | null | undefined, sleep?: HttpOptions["sleep"]): Promise<void> {
   signal?.throwIfAborted();
   await new Promise<void>((resolve, reject) => {
     let timer: ReturnType<typeof setTimeout> | undefined;

@@ -38,10 +38,11 @@ describe("fetchWakaTime", () => {
   });
 
   test("works with a compatible server such as Wakapi", async () => {
-    const { fetch, calls } = mockFetch(() => json({ data: { status: "pending_update" } }));
+    const { fetch, calls } = mockFetch(() => json({ data: { human_readable_total: "0 secs", languages: [] } }));
     const stats = await fetchWakaTime({ apiKey: "k", apiUrl: "https://wakapi.example.com/api/compat/wakatime/v1/", fetch });
     expect(calls[0]!.url.pathname).toBe("/api/compat/wakatime/v1/users/current/stats/last_7_days");
-    expect(stats.ready).toBe(false);
+    expect(stats.ready).toBe(true);
+    expect(stats.total).toBe("0 secs");
   });
 });
 

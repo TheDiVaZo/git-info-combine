@@ -74,7 +74,7 @@ export function renderLayout(rows: CardRenderer[][], options: LayoutOptions = {}
     Math.max(0, y - gap),
     placed.flatMap((row) => row.titles).join(", "),
     stacked.join(""),
-    options.title ?? "Git activity across GitHub and GitLab",
+    options.title ?? "Git activity and coding time",
   );
   return { rows: rowSvgs, combined };
 }

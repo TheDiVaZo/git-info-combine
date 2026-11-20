@@ -120,6 +120,9 @@ export async function run(config: Config, deps: RunDeps): Promise<RunResult> {
           break;
         }
         const stats = await (deps.wakatime ?? fetchWakaTime)({ apiKey, apiUrl, range });
+        if (!stats.ready) {
+          throw new Error("WakaTime statistics are still calculating. Previous cards and cache were not replaced; try again later.");
+        }
         cards.push({ name: card, file: "wakatime", row: "summary", render: (extra) => renderWakaTimeCard(stats, { ...config.wakatime, ...extra }) });
         break;
       }

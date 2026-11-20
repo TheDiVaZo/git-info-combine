@@ -40,6 +40,8 @@ Every card is on by default; `wakatime`, `pins` and `gists` are skipped until yo
 
 Cards that usually sit side by side get the same height (`equal-heights`, on by default): stats, languages, hosts and wakatime match each other, and so do pins and gists.
 
+WakaTime may calculate a newly requested period in the background. The Action checks readiness up to four times, waiting 10, 20 and 30 seconds between checks, with a 90-second overall deadline including HTTP retries. Pending or malformed statistics never replace existing cards or the cache: the run fails before writing output, and a later run can try again. Missing statistics are not interpreted as zero coding time. Compatible servers such as Wakapi may omit readiness flags when returning a valid completed response.
+
 ### Layout: rows that line up
 
 Images side by side in a README never quite line up: rows end at different widths, and GitHub spaces them unevenly. The `layout` input has the Action lay the cards out itself:

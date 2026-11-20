@@ -24,17 +24,20 @@ export function renderWakaTimeCard(stats: WakaTimeStats, options: WakaTimeCardOp
   const barX = 25 + Math.round(BAR_WIDTH * 0.3);
   const barWidth = WIDTH - 25 - 110 - barX;
   const hidden = new Set((options.hide ?? []).map((name) => name.toLowerCase()));
-  const languages = stats.languages
+  const languages = (stats.ready ? stats.languages : [])
     .filter((language) => !hidden.has(language.name.toLowerCase()) && language.percent > 0)
     .slice(0, options.count ?? 6)
     .map((language) => ({ ...language, color: LANGUAGE_COLORS[language.name] ?? "#858585" }));
   const top = titleOffset(options);
-  const summary = `${stats.total} in the ${RANGE_LABELS[stats.range]}`.replace("in the all time", "of all time");
+  const summary = stats.ready
+    ? `${stats.total} in the ${RANGE_LABELS[stats.range]}`.replace("in the all time", "of all time")
+    : `Stats for the ${RANGE_LABELS[stats.range]}`.replace("for the all time", "for all time");
+  const pendingMessage = "WakaTime is still calculating these stats.";
 
   const body: string[] = [`<text class="small" x="25" y="0">${escapeXml(summary)}</text>`];
   let height: number;
   if (!stats.ready || languages.length === 0) {
-    body.push(`<text class="small" x="25" y="30">${stats.ready ? "No coding activity yet." : "WakaTime is still calculating these stats."}</text>`);
+    body.push(`<text class="small" x="25" y="30">${stats.ready ? "No coding activity yet." : pendingMessage}</text>`);
     height = top + 50;
   } else if (options.layout === "compact") {
     let x = 0;
@@ -76,7 +79,9 @@ export function renderWakaTimeCard(stats: WakaTimeStats, options: WakaTimeCardOp
     width: WIDTH,
     height,
     title: "WakaTime Stats",
-    description: `${summary}. ${languages.map((l) => `${l.name} ${l.text}`).join(", ")}`,
+    description: stats.ready
+      ? `${summary}. ${languages.map((l) => `${l.name} ${l.text}`).join(", ")}`
+      : `${summary}. ${pendingMessage}`,
     body: body.join(""),
   });
 }
