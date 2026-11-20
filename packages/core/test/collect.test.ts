@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { CACHE_VERSION, collect, parseCache } from "../src/collect.ts";
+import { CACHE_VERSION, collect, parseCache, type Cache } from "../src/collect.ts";
+import type { GitLabCache } from "../src/gitlab.ts";
 import { gitlabInstanceId, type GitLabSourceConfig } from "../src/sources.ts";
 import { GITLAB_EVENTS, githubRoute, gitlabRoute, NOW, PRIVATE_NAMES } from "./fixtures.ts";
 import { json, mockFetch, type Route } from "./mock.ts";
@@ -81,6 +82,10 @@ const [WORK, PERSONAL] = SOURCES as [GitLabSourceConfig, GitLabSourceConfig];
 const workId = gitlabInstanceId(WORK.url);
 const personalId = gitlabInstanceId(PERSONAL.url);
 
+function gitlabCache(cache: Cache, instance: string): GitLabCache {
+  return cache.sources![`gitlab:${instance}`]!.data as GitLabCache;
+}
+
 function multipleRoutes(override?: Route) {
   const routes = [gitlabRoute(WORK.url), gitlabRoute(PERSONAL.url, GITLAB_EVENTS.slice(4))];
   return mockFetch((call) => override?.(call) ?? githubRoute(call) ?? routes.map((route) => route(call)).find(Boolean));
@@ -95,9 +100,9 @@ describe("multiple GitLab sources", () => {
     expect(result.activity.totals).toMatchObject({ contributions: 34, commits: 70, stars: 17 });
     expect(result.activity.hosts[1]!.source).toEqual({ id: workId, label: "Work", color: WORK.color });
     expect(result.activity.hosts[2]!.source).toEqual({ id: personalId, label: "Personal", color: PERSONAL.color });
-    expect(Object.keys(result.cache.gitlabs!).sort()).toEqual([workId, personalId].sort());
-    expect(result.cache.gitlabs![workId]!.days["2026-09-30"]?.contributions).toBe(3);
-    expect(result.cache.gitlabs![personalId]!.days["2026-09-30"]).toBeUndefined();
+    expect(Object.keys(result.cache.sources!).sort()).toEqual([`gitlab:${workId}`, `gitlab:${personalId}`].sort());
+    expect(gitlabCache(result.cache, workId).days["2026-09-30"]?.contributions).toBe(3);
+    expect(gitlabCache(result.cache, personalId).days["2026-09-30"]).toBeUndefined();
     for (const source of SOURCES) {
       const requests = calls.filter((call) => call.url.origin === source.url);
       expect(requests.length).toBeGreaterThan(0);
@@ -124,15 +129,15 @@ describe("multiple GitLab sources", () => {
 
   test("a different user invalidates only that server's cache", async () => {
     const first = await collect({ gitlabSources: SOURCES, fetch: multipleRoutes().fetch, now: NOW });
-    for (const cache of Object.values(first.cache.gitlabs!)) {
+    for (const cache of [gitlabCache(first.cache, workId), gitlabCache(first.cache, personalId)]) {
       cache.days["2020-01-01"] = { contributions: 9, commits: 9, pullRequests: 0, issues: 0, reviews: 0 };
     }
     const { fetch, calls } = multipleRoutes((call) => call.url.origin === PERSONAL.url && call.url.pathname === "/api/v4/user"
       ? json({ id: 99, username: "octo", name: "Octo Cat", email: "octo@example.com", followers: 2 }) : undefined);
     const second = await collect({ gitlabSources: SOURCES, cache: first.cache, fetch, now: NOW });
-    expect(second.cache.gitlabs![workId]!.days["2020-01-01"]?.contributions).toBe(9);
-    expect(second.cache.gitlabs![personalId]!.days["2020-01-01"]).toBeUndefined();
-    expect(second.cache.gitlabs![personalId]!.userId).toBe(99);
+    expect(gitlabCache(second.cache, workId).days["2020-01-01"]?.contributions).toBe(9);
+    expect(gitlabCache(second.cache, personalId).days["2020-01-01"]).toBeUndefined();
+    expect(gitlabCache(second.cache, personalId).userId).toBe(99);
     const contributions = calls.filter((call) => call.url.pathname.endsWith("/contributors"));
     expect(contributions.length).toBeGreaterThan(0);
     expect(contributions.every((call) => call.url.origin === PERSONAL.url)).toBe(true);
@@ -143,7 +148,7 @@ describe("multiple GitLab sources", () => {
     const second = await collect({ gitlabSources: [WORK], cache: first.cache, fetch: multipleRoutes().fetch, now: NOW });
     expect(second.activity.hosts).toHaveLength(1);
     expect(second.activity.totals.contributions).toBe(7);
-    expect(second.cache.gitlabs![personalId]).toEqual(first.cache.gitlabs![personalId]);
+    expect(gitlabCache(second.cache, personalId)).toEqual(gitlabCache(first.cache, personalId));
     const { fetch, calls } = multipleRoutes();
     const restored = await collect({ gitlabSources: SOURCES, cache: second.cache, fetch, now: NOW });
     expect(restored.activity).toEqual(first.activity);
@@ -218,14 +223,14 @@ describe("parseCache", () => {
 
   test("migrates v1 and preserves historical days that the server no longer returns", async () => {
     const first = await collect({ githubToken: "a", gitlabToken: WORK.token, gitlabUrl: WORK.url, fetch: multipleRoutes().fetch, now: NOW });
-    const legacyGitLab = first.cache.gitlabs![workId]!;
+    const legacyGitLab = gitlabCache(first.cache, workId);
     legacyGitLab.days["2020-01-01"] = { contributions: 9, commits: 9, pullRequests: 0, issues: 0, reviews: 0 };
     const cache = parseCache(JSON.stringify({ version: 1, github: first.cache.github, gitlab: legacyGitLab }));
-    expect(cache).toEqual({ version: CACHE_VERSION, github: first.cache.github, gitlabs: { [workId]: legacyGitLab } });
+    expect(cache).toEqual({ version: CACHE_VERSION, github: first.cache.github, sources: { [`gitlab:${workId}`]: { provider: "gitlab", version: 1, data: legacyGitLab } } });
     const next = await collect({ gitlabSources: SOURCES, cache, fetch: multipleRoutes().fetch, now: NOW });
     expect(next.activity.hosts[0]!.days["2020-01-01"]).toBe(9);
     expect(next.activity.hosts[1]!.days["2020-01-01"]).toBeUndefined();
     expect(next.cache.github).toEqual(first.cache.github);
-    expect(next.cache.gitlabs![workId]!.projectStats).toEqual(legacyGitLab.projectStats);
+    expect(gitlabCache(next.cache, workId).projectStats).toEqual(legacyGitLab.projectStats);
   });
 });

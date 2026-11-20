@@ -2,10 +2,12 @@ import {
   CARD_NAMES,
   parseCards,
   parseGitLabSources,
+  parseSources,
   STAT_NAMES,
   type CardName,
   type CardOptions,
   type GitLabSourceConfig,
+  type ServerSourceConfig,
   type HeatmapCardOptions,
   type LanguagesCardOptions,
   type StatName,
@@ -23,6 +25,7 @@ export interface Config {
   gitlabToken?: string;
   gitlabUrl?: string;
   gitlabSources?: GitLabSourceConfig[];
+  sources?: ServerSourceConfig[];
   gitlabPrimarySource?: string;
   manualContributionsDir?: string;
   includeOrgRepos: boolean;
@@ -80,16 +83,20 @@ export function readConfig(getInput: GetInput): Config {
   const githubToken = text("github-token");
   const gitlabToken = text("gitlab-token");
   const gitlabSources = parseGitLabSources(text("gitlab-sources"));
+  const sources = parseSources(text("sources"));
   const manualContributionsDir = text("manual-contributions-dir");
+  if (sources !== undefined && (gitlabToken || gitlabSources !== undefined)) {
+    throw new Error("Use either sources or the legacy GitLab credentials, not both.");
+  }
   if (gitlabToken && gitlabSources !== undefined) throw new Error("Use either gitlab-token or gitlab-sources, not both.");
-  if (!githubToken && !gitlabToken && !gitlabSources?.length && !manualContributionsDir) {
-    throw new Error("Set at least one of github-token, gitlab-token, gitlab-sources or manual-contributions-dir.");
+  if (!githubToken && !gitlabToken && !gitlabSources?.length && !sources?.length && !manualContributionsDir) {
+    throw new Error("Set at least one of github-token, sources, gitlab-token, gitlab-sources or manual-contributions-dir.");
   }
   const cards = parseCards(getInput("cards"));
   const pins = list("pins");
   const gists = list("gists");
   const gitlabPrimarySource = text("gitlab-primary-source");
-  primaryGitLabSource({ gitlabSources, gitlabPrimarySource, cards, pins, gists });
+  if (sources === undefined) primaryGitLabSource({ gitlabSources, gitlabPrimarySource, cards, pins, gists });
 
   const common: CardOptions = {
     theme: text("theme"),
@@ -116,6 +123,7 @@ export function readConfig(getInput: GetInput): Config {
     gitlabToken,
     gitlabUrl: text("gitlab-url"),
     gitlabSources,
+    sources,
     gitlabPrimarySource,
     manualContributionsDir,
     includeOrgRepos: bool("include-org-repos", true),
@@ -171,12 +179,21 @@ export { CARD_NAMES };
 
 /** Selects the one GitLab used for public pins and snippets. */
 export function primaryGitLabSource(
-  config: Pick<Config, "gitlabSources" | "gitlabPrimarySource" | "cards" | "pins" | "gists">,
+  config: Pick<Config, "sources" | "gitlabSources" | "gitlabPrimarySource" | "cards" | "pins" | "gists">,
+  sourceProviders?: readonly string[],
 ): GitLabSourceConfig | undefined {
-  const sources = config.gitlabSources ?? [];
+  // Resolved providers correspond to configured entries, even when providers share a base URL.
+  const sources: GitLabSourceConfig[] = config.sources === undefined ? config.gitlabSources ?? [] : config.sources
+    .filter((source, index) => (sourceProviders?.[index] ?? source.provider) === "gitlab")
+    .map(({ id, url, token, label, color, options }) => ({
+      id, url, token, label, color,
+      ...(options && typeof options === "object" && "mirrors" in options ? { mirrors: options.mirrors as string[] } : {}),
+    }));
   if (config.gitlabPrimarySource) {
     const source = sources.find(({ id }) => id === config.gitlabPrimarySource);
-    if (!source) throw new Error("Input gitlab-primary-source must match an id in gitlab-sources.");
+    if (!source) throw new Error(config.sources === undefined
+      ? "Input gitlab-primary-source must match an id in gitlab-sources."
+      : "Input gitlab-primary-source must match a GitLab source id in sources.");
     return source;
   }
   if (sources.length === 1) return sources[0];

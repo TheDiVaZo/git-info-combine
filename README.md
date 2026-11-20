@@ -1,6 +1,6 @@
 # Git-info-combine
 
-A GitHub Action that combines your **GitHub and GitLab** activity into cards for your profile README, including multiple self-hosted GitLab servers. Private work is counted; private repo and project names are never shown.
+A GitHub Action that combines **GitHub, GitLab, Forgejo and local Git** activity into cards for your profile README. A shared server list supports multiple providers and optional API-based provider detection. Private repo and project names are never shown.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/KINGH242/KINGH242/main/git-info-combine/heatmap-dark.svg">
@@ -22,16 +22,16 @@ A GitHub Action that combines your **GitHub and GitLab** activity into cards for
 
 ## Why
 
-If most of your work happens on GitLab, in private repos or in company groups, your GitHub contribution graph shows only a small part of it. Git-info-combine reads both hosts with your own tokens, inside your own workflow, and draws one honest picture.
+If most of your work happens on other Git servers, in private repos or in company groups, your GitHub contribution graph shows only a small part of it. Git-info-combine reads configured services with your own tokens, inside your own workflow, and combines them with reviewed local exports.
 
 ## Cards
 
 | Card | Shows |
 |---|---|
 | `heatmap` | Contribution calendar across sources, each day split by source colour |
-| `stats` | Stars, commits, PRs/MRs, issues, reviews and repos contributed to, added up, with a rank |
-| `languages` | Top languages across both hosts |
-| `hosts` | How your activity splits between GitHub and each GitLab server: contributions, commits, PRs/MRs and issues |
+| `stats` | Supported totals across sources, with unavailable or partial metrics identified |
+| `languages` | Top languages from sources that provide language statistics |
+| `hosts` | Activity split by source, with each source's available metrics |
 | `wakatime` | Coding time by language from WakaTime (or Wakapi) |
 | `pins` | One card per public repo or project you list in `pins` |
 | `gists` | One card per public gist or snippet you list in `gists` |
@@ -65,8 +65,9 @@ Every row comes out exactly `layout-width` wide (default 800), cards in a row sh
 
 1. **Create the tokens.**
    - **GitHub:** a classic personal access token with `repo`, `read:org` and `read:user`, so private and organisation activity can be read. The default `GITHUB_TOKEN` cannot read your activity in other repos.
-   - **GitLab:** a personal access token with `read_api`.
-2. **Add them as secrets** in your profile repo (the repo named after your username), for example `GIC_GITHUB_TOKEN` and `GIC_GITLAB_TOKEN`.
+   - **GitLab:** a personal access token with `read_api` and `read_user` (the events API requires user access).
+   - **Forgejo:** a personal access token with `read:user` for the account's calendar.
+2. **Add them as secrets** in your profile repo (the repo named after your username): `GIC_GITHUB_TOKEN` and a `GIC_SOURCES` JSON array as shown below. Any configured source can be used on its own.
 3. **Add the workflow:**
 
 ```yaml
@@ -85,11 +86,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: Kingpin-Apps/git-info-combine@v1
+      - uses: TheDiVaZo/git-info-combine@main # Pin a reviewed commit SHA for production.
         with:
           github-token: ${{ secrets.GIC_GITHUB_TOKEN }}
-          gitlab-token: ${{ secrets.GIC_GITLAB_TOKEN }}
-          # gitlab-url: https://gitlab.example.com  # self-hosted GitLab
+          sources: ${{ secrets.GIC_SOURCES }}
           # pins: |
           #   your-name/your-repo
           #   gitlab:your-group/your-project
@@ -107,9 +107,43 @@ jobs:
 
 Each card has three files: `<card>.svg` (follows the viewer's system setting), `<card>-light.svg` and `<card>-dark.svg`. Pin and gist files are named after what they show: `pins: Kingpin-Apps/git-info-combine` writes `pin-github-kingpin-apps-git-info-combine.svg`.
 
-The first run reads your whole history and can take a few minutes. Later runs use the cache and only fetch what changed.
+The first run can take a few minutes. Subsequent runs reuse the cache where each provider supports it. The history available on the first run depends on the provider's API retention window.
 
-### Multiple GitLab servers
+### Multiple servers and providers
+
+Store the complete server list in the `GIC_SOURCES` repository secret. Every object has `id`, `url`, `token`, `label` and `color`. `provider` is optional: omit it for API detection, or set `gitlab` or `forgejo` explicitly.
+
+```json
+[
+  {
+    "id": "work",
+    "url": "https://gitlab.example.com",
+    "token": "<PERSONAL_ACCESS_TOKEN_1>",
+    "label": "Work",
+    "color": "#fc6d26"
+  },
+  {
+    "id": "personal",
+    "url": "https://forgejo.example.org",
+    "token": "<PERSONAL_ACCESS_TOKEN_2>",
+    "label": "Personal",
+    "color": "#fb923c",
+    "provider": "forgejo"
+  }
+]
+```
+
+Each URL is the base of the installation, without `/api/v4`, `/api/v1`, or a repository path. Installation subpaths are supported. IDs are unique across the list; each provider/server pair represents one account. Labels appear publicly; URLs and tokens stay in the secret. To add another server, append another object to the same array.
+
+Detection uses provider-specific JSON endpoints on the configured server: Forgejo's `/api/forgejo/v1/version` without a token, and GitLab's `/api/v4/version` with that source's token. It does not guess from hostnames, HTML or an HTTP error. Explicit `provider` bypasses detection. If detection is blocked, ambiguous or fails authentication, correct the URL/token or choose the provider explicitly; errors never silently switch providers. Redirects are rejected, so use the final installation URL.
+
+Provider settings go under `options`; GitLab accepts `"options": { "mirrors": ["group/project"] }`. Other providers reject unsupported options. GitLab pins/snippets still use `gitlab-primary-source`, which selects a GitLab ID from the shared list after detection.
+
+Forgejo contributes its native activity calendar, not an authored-commit count. The server returns a rolling 371-day window in short time buckets; they are combined into UTC days. Complete recent days are replaced on each successful run, while older cached history is retained. The incomplete oldest day is omitted on the first run. Forgejo does not supply detailed commit, issue, language or repository metrics through this adapter; unavailable values are marked accordingly. Calendar aggregates cannot deduplicate work also reported by GitHub, GitLab or a manual source.
+
+The old GitLab inputs remain supported. Use either `sources` or `gitlab-sources`/`gitlab-token`; combining them is an error. Old GitLab cache history migrates automatically, including temporarily disabled servers. See [provider architecture and extension guide](docs/providers.md) for the common adapter contract, cache and detection rules.
+
+### Multiple GitLab servers (compatible legacy configuration)
 
 Use `gitlab-sources` instead of `gitlab-token` to collect from several servers. It is a JSON array; each server gets its own token, public label and colour. For example, replace the `with` block above with:
 
@@ -152,7 +186,7 @@ Each server has an independent cache. Existing single-server caches are migrated
 
 ### Manual activity from local repositories
 
-Use `manual-contributions-dir: contributions/manual` to combine reviewed local Git exports with the existing GitHub and multiple-GitLab integrations. The directory is relative to the Action workspace. Missing directories are ignored; invalid JSON fails the run before any cards or cache are replaced. A manual-only run needs no API token.
+Use `manual-contributions-dir: contributions/manual` to combine reviewed local Git exports with the automatic integrations. The directory is relative to the Action workspace. Missing directories are ignored; invalid JSON fails the run before any cards or cache are replaced. A manual-only run needs no API token.
 
 The separate local exporter reads your existing repositories without fetching or changing them:
 
@@ -166,30 +200,30 @@ Manual sources reuse the same cards, legends and themes. Local commits are disti
 
 ## How things are counted
 
-- **Contributions** (the heatmap) are GitHub's own contribution calendar plus GitLab's events, counted the way GitLab's calendar counts them.
+- **Heatmap activity** combines GitHub's contribution calendar, GitLab's calendar events, Forgejo's calendar events and manual commit counts. The tooltip identifies each source's unit; a mixed sum is activity units.
 - **Commits** are your commits on each repo's default branch: GitHub's commit contributions, and on GitLab, each project's contributor list matched to all of your GitLab emails and your name. GitLab projects are discovered through membership with Developer access or higher.
 - **Languages** count every repo once, split by its languages (`languages-weighting: repo`). GitLab reports only percentages, not bytes, so this keeps both hosts in the same unit. `languages-weighting: size` weighs by size instead, so big repos dominate.
 - **WordPress sites** that bundle WordPress core (at the root, or in `wordpress/`, `public/`, `public_html/` or Bedrock's `web/wp/`) count as one PHP repo: WordPress's own code is not counted as yours. Turn this off with `detect-wordpress: false`.
 - **Mirrors.** A GitLab project whose latest commit matches one of your GitHub repos is a mirror, and is counted once. Name others with `gitlab-mirrors`.
 - **Languages and stars** come from repos you own or are an organisation member of on GitHub (`include-org-repos`), and from projects where you have Maintainer access or higher on GitLab. Forks are skipped.
-- The **rank** uses [GitHub Stats Extended](https://github.com/stats-organization/github-stats-extended)'s formula on the combined numbers.
+- The **rank** uses [GitHub Stats Extended](https://github.com/stats-organization/github-stats-extended)'s formula on reporting sources when all required metrics are available; partial coverage is identified. A calendar-only source cannot receive a rank on its own.
 
 ## Privacy
 
 - Private repos, projects and their activity are **counted**, but their **names are never written** to the cards, the cache or the logs. A check refuses to write output that contains one.
 - Tokens stay in your repo's secrets and are only used inside the Action run.
-- The cache (`cache.json`) holds counts, aggregate project statistics, account identifiers and opaque project ids. Each GitLab server's address is stored only as a hash; tokens and source labels are not cached.
+- The cache (`cache.json`) holds counts, aggregate project statistics, account identifiers and opaque project ids. Server addresses are stored only as hashes; tokens and source labels are not cached.
 - Pins and gists must be public; private repos, internal projects and secret gists are refused.
 - WakaTime's project names are dropped; only languages and time are used.
 - Source labels are public. Put private server URLs in secrets, as in the example above. `exclude-repos`, `gitlab-mirrors` and per-source `mirrors` are the exceptions you control: naming a private repo in a public workflow reveals its name.
 
 ## Inputs
 
-Configure at least one GitHub or GitLab source. All other inputs are optional. See [`action.yml`](action.yml) for the full descriptions.
+Configure at least one automatic or manual source. See [`action.yml`](action.yml) for the full descriptions.
 
 | Area | Inputs |
 |---|---|
-| Sources | `github-token`, `gitlab-token`, `gitlab-url`, `gitlab-sources`, `gitlab-primary-source`, `manual-contributions-dir`, `include-org-repos`, `exclude-repos`, `gitlab-mirrors`, `detect-wordpress`, `wakatime-api-key`, `wakatime-url`, `pins`, `gists` |
+| Sources | `github-token`, `sources`, `gitlab-token`, `gitlab-url`, `gitlab-sources`, `gitlab-primary-source`, `manual-contributions-dir`, `include-org-repos`, `exclude-repos`, `gitlab-mirrors`, `detect-wordpress`, `wakatime-api-key`, `wakatime-url`, `pins`, `gists` |
 | Output | `cards`, `output-dir`, `commit`, `commit-message`, `equal-heights`, `layout`, `layout-width`, `layout-gap` |
 | Look | `theme` (`auto` or any [GitHub Stats Extended theme](https://github.com/stats-organization/github-stats-extended/blob/master/apps/frontend/src/content/docs/docs/customization/themes.md)), `hide-title`, `hide-border`, `border-radius`, `title-color`, `icon-color`, `text-color`, `bg-color`, `border-color`, `github-color`, `gitlab-color` |
 | Stats | `name`, `stats-hide`, `hide-rank`, `show-hosts`, `number-format` |
@@ -199,7 +233,7 @@ Configure at least one GitHub or GitLab source. All other inputs are optional. S
 
 ## Good to know
 
-- **Tokens expire.** When your GitHub or GitLab token expires, runs fail. Set a reminder to renew it.
+- **Tokens expire.** When a configured token expires, runs fail. Set a reminder to renew it.
 - **Scheduled workflows pause** after 60 days without activity in a repo. The cards change every run, so their commits normally keep the schedule alive.
 
 ## Development
@@ -217,7 +251,7 @@ GIC_GITHUB_TOKEN=... GIC_GITLAB_TOKEN=... bun run fetch
 bun run render radical   # writes .out/cards/, with an index.html preview
 ```
 
-For a local multi-server run, set `GIC_GITLAB_SOURCES` to the same JSON array as `gitlab-sources` (with actual environment-provided credentials, not GitHub workflow expressions), then run `bun run fetch`. Leave `GIC_GITLAB_TOKEN` unset. The script writes combined activity and per-server cache data to `.out/`; `bun run render` shows each source separately.
+For a local multi-server run, set `GIC_SOURCES` to the shared JSON array (with actual environment-provided credentials, not GitHub workflow expressions), then run `bun run fetch`. Leave `GIC_GITLAB_SOURCES` and `GIC_GITLAB_TOKEN` unset. Legacy GitLab-only environment settings still work when `GIC_SOURCES` is absent. The script writes combined activity and per-server cache data to `.out/`; `bun run render` shows each source separately.
 
 ## Credits
 

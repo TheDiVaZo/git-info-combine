@@ -1,5 +1,5 @@
 import { addDays, toDateKey, type CombinedActivity, type DateKey } from "../model.ts";
-import { activityUnit, hostLegend, manualActivityDescription, resolveSources, sourceLegend, type HostColors } from "./hosts.ts";
+import { activityDescription, activityUnit, hostLegend, resolveSources, sourceLegend, type HostColors } from "./hosts.ts";
 import { escapeXml, formatNumber, renderFrame, titleOffset, type CardOptions } from "./svg.ts";
 
 export interface HeatmapCardOptions extends CardOptions {
@@ -31,19 +31,22 @@ export function renderHeatmapCard(activity: CombinedActivity, options: HeatmapCa
   const mode = options.mode ?? "hosts";
   const hosts = activity.hosts.map((h) => h.host);
   const sources = resolveSources(activity.hosts, options.hostColors);
-  const hasManual = activity.hosts.some((host) => host.host === "manual");
-  const sourceAware = hasManual || activity.hosts.some((h) => h.source);
+  const hasLocal = sources.some((source) => source.origin === "local");
+  const activityUnits = sources.some((source) => source.metric !== "contributions");
+  const detailed = sources.some((source) => source.detailed);
+  const sourceAware = hasLocal || activity.hosts.some((h) => h.source);
   const colors = Object.fromEntries(sources.map((source) => [source.id, source.color]));
   const single = "var(--icon)";
-  const unit = hasManual ? "activity units" : "contributions";
+  const unit = activityUnits ? "activity units" : "contributions";
 
   const tooltip = (date: DateKey, total: number): string => {
-    if (!hasManual) return "";
+    if (!detailed) return "";
     const parts = activity.hosts.map((host, index) => {
-      const timezone = host.source?.timezone ? ` (${host.source.timezone})` : "";
-      return `${sources[index]!.label}: ${formatNumber(host.days[date] ?? 0, "long")} ${activityUnit(host)}${timezone}`;
+      const source = sources[index]!;
+      const timezone = source.timezone ? ` (${source.timezone})` : "";
+      return `${source.label}: ${formatNumber(host.days[date] ?? 0, "long")} ${activityUnit(source)}${timezone}`;
     });
-    return `<title>${escapeXml(`${date}: ${formatNumber(total, "long")} activity units. ${parts.join("; ")}.`)}</title>`;
+    return `<title>${escapeXml(`${date}: ${formatNumber(total, "long")} ${unit}. ${parts.join("; ")}.`)}</title>`;
   };
 
   const days = (date: DateKey): Day => {
@@ -103,7 +106,7 @@ export function renderHeatmapCard(activity: CombinedActivity, options: HeatmapCa
       blockTotal += day.total;
       const details = tooltip(date, day.total);
       if (day.total === 0) {
-        if (hasManual) {
+        if (detailed) {
           filled.push(`<rect x="${x}" y="${y}" width="${CELL}" height="${CELL}" fill="var(--text)" fill-opacity="0.12">${details}</rect>`);
         } else {
           empty.push(`M${x} ${y}h${CELL}v${CELL}h-${CELL}z`);
@@ -140,14 +143,14 @@ export function renderHeatmapCard(activity: CombinedActivity, options: HeatmapCa
     for (const [row, name] of [[1, "Mon"], [3, "Wed"], [5, "Fri"]] as const) {
       body.push(`<text class="small" x="${LEFT - LABELS}" y="${y0 + 15 + row * STEP + 9}">${name}</text>`);
     }
-    if (!hasManual) body.push(`<path d="${empty.join("")}" fill="var(--text)" fill-opacity="0.12"/>`);
+    if (!detailed) body.push(`<path d="${empty.join("")}" fill="var(--text)" fill-opacity="0.12"/>`);
     body.push(...filled);
   });
 
   const legendY = blocks.length * blockHeight + blocks.filter((block) => block.label).length * 20 + 10;
   const scaleX = width - 25 - 5 * STEP - 70;
   let scaleY = legendY;
-  if (mode === "hosts" || hasManual) {
+  if (mode === "hosts" || detailed) {
     if (sourceAware) {
       const legend = sourceLegend(sources, 25, legendY, width - 50);
       body.push(legend.svg);
@@ -179,7 +182,7 @@ export function renderHeatmapCard(activity: CombinedActivity, options: HeatmapCa
     width,
     height: top + scaleY + 20,
     title,
-    description: `${hasManual ? "Activity" : "Contribution"} calendar combining ${hostNames}: ${title}.${manualActivityDescription(activity.hosts)}`,
+    description: `${activityUnits ? "Activity" : "Contribution"} calendar combining ${hostNames}: ${title}.${activityDescription(sources)}`,
     body: body.join(""),
   });
 }

@@ -23,3 +23,19 @@ test("errors name the path and status but not the response body", async () => {
   expect(error.status).toBe(404);
   expect(error.message).toBe("GET /api/v4/projects/9 failed with HTTP 404");
 });
+
+test("a request deadline aborts rate-limit waits instead of sleeping indefinitely", async () => {
+  const controller = new AbortController();
+  const { fetch, calls } = mockFetch(() => json({}, { "retry-after": "86400" }, 429));
+  await expect(request("https://example.com/x", { signal: controller.signal }, {
+    fetch,
+    sleep: async () => { controller.abort(new Error("deadline reached")); },
+  })).rejects.toThrow("deadline reached");
+  expect(calls).toHaveLength(1);
+});
+
+test("timeoutMs covers the default retry timer", async () => {
+  const { fetch, calls } = mockFetch(() => json({}, { "retry-after": "86400" }, 429));
+  await expect(request("https://example.com/x", {}, { fetch, timeoutMs: 5 })).rejects.toThrow();
+  expect(calls).toHaveLength(1);
+});

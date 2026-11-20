@@ -61,7 +61,7 @@ describe("readConfig", () => {
   });
 
   test("rejects bad values with a clear message", () => {
-    expect(() => readConfig(inputs({}))).toThrow("Set at least one of github-token, gitlab-token, gitlab-sources or manual-contributions-dir.");
+    expect(() => readConfig(inputs({}))).toThrow("Set at least one of github-token, sources, gitlab-token, gitlab-sources or manual-contributions-dir.");
     expect(() => readConfig(inputs({ "github-token": "a", "hide-rank": "maybe" }))).toThrow("Input hide-rank must be true or false");
     expect(() => readConfig(inputs({ "github-token": "a", "heatmap-range": "week" }))).toThrow("Input heatmap-range must be one of last-year, all");
     expect(() => readConfig(inputs({ "github-token": "a", "stats-hide": "followers" }))).toThrow('unknown stat "followers"');

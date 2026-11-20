@@ -91,7 +91,8 @@ describe("manual source rendering", () => {
     expect(svg).toContain("<title id=\"title\">Git Activity Stats</title>");
     expect(svg).not.toContain("&apos;s Git Stats");
     expect(svg).toContain("Total Commits: 10");
-    expect(svg).toContain("Total Stars Earned: 0");
+    expect(svg).toContain("Total Stars Earned: not reported");
+    expect(svg).toContain("— = not reported");
     expect(svg).toContain("Local sources report commits only; other metrics are not reported");
     expect(renderStatsCard(activity, { name: "octo" })).toContain("octo&apos;s Git Stats");
     expect(renderLanguagesCard(activity)).not.toContain("TypeScript");

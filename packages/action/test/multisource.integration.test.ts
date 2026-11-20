@@ -88,8 +88,8 @@ describe("multiple GitLab servers through the complete Action pipeline", () => {
     expect(svgWidth(outputs["row-2.svg"]!)).toBe(800);
     expect(svgHeight(outputs["stats.svg"]!)).toBe(svgHeight(outputs["hosts.svg"]!));
     const persisted = parseCache(outputs["cache.json"]);
-    expect(persisted?.version).toBe(2);
-    expect(Object.keys(persisted?.gitlabs ?? {})).toHaveLength(2);
+    expect(persisted?.version).toBe(3);
+    expect(Object.keys(persisted?.sources ?? {})).toHaveLength(2);
 
     const written = JSON.stringify({ outputs, logs: log.lines });
     for (const sensitive of [...PRIVATE_NAMES, ...sources.flatMap((source) => [new URL(source.url).hostname, source.token]), "github-secret-token"]) {

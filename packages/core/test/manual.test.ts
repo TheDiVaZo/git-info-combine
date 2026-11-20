@@ -76,7 +76,7 @@ describe("manual collection", () => {
     expect(result.activity.totals).toEqual({ contributions: 5, commits: 5, pullRequests: 0, issues: 0, reviews: 0, stars: 0, followers: 0, contributedTo: 0 });
     expect(result.activity.hosts[0]).toMatchObject({ host: "manual", login: "", repos: { public: 0, private: 0 }, languages: {} });
     expect(result.activity.hosts[0]!.source).toEqual({ id: "manual:exbo", label: "EXBO", color: manualSourceColor("exbo"), metric: "commits", timezone: "Europe/Moscow" });
-    expect(result.cache).toEqual({ version: 2 });
+    expect(result.cache).toEqual({ version: 3 });
     expect(result.mirrored).toBe(0);
   });
 
@@ -98,7 +98,7 @@ describe("manual collection", () => {
     const result = await collect({ githubToken: "github-secret", gitlabSources: sources, manualSources: [example()], fetch: api.fetch, now: NOW });
     expect(result.activity.hosts.map((host) => host.host)).toEqual(["github", "gitlab", "gitlab", "manual"]);
     expect(result.activity.totals).toMatchObject({ contributions: 39, commits: 75, stars: 17 });
-    expect(Object.keys(result.cache.gitlabs!)).toHaveLength(2);
+    expect(Object.keys(result.cache.sources!)).toHaveLength(2);
     expect(JSON.stringify(result.cache)).not.toContain("EXBO");
     const written = JSON.stringify({ activity: result.activity, cache: result.cache });
     for (const secret of [...PRIVATE_NAMES, ...sources.flatMap((source) => [source.url, source.token]), "github-secret"]) expect(written).not.toContain(secret);

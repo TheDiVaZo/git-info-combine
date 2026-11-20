@@ -1,5 +1,6 @@
 export type Host = "github" | "gitlab";
-export type ActivityHost = Host | "manual";
+/** Provider IDs are validated by the provider registry; rendering uses source metadata. */
+export type ActivityHost = string;
 
 /** Calendar day in `YYYY-MM-DD` form, using the source's reporting time zone. */
 export type DateKey = string;
@@ -58,6 +59,12 @@ export function addRepoLanguages(
 }
 
 /** Public presentation settings for one independently collected server. */
+export interface SourceCapabilities {
+  totals: (keyof Totals)[];
+  languages: boolean;
+  repos: boolean;
+}
+
 export interface ActivitySource {
   /** Opaque server identity, independent of credentials and display settings. */
   id: string;
@@ -65,6 +72,8 @@ export interface ActivitySource {
   label: string;
   color: string;
   metric?: "commits" | "contributions";
+  origin?: "api" | "local";
+  capabilities?: SourceCapabilities;
   timezone?: string;
 }
 

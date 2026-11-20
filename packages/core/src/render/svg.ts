@@ -1,10 +1,11 @@
-import type { ActivityHost } from "../model.ts";
+import type { Host } from "../model.ts";
 import { themes, type Theme } from "./themes.ts";
 
 export const FONT = "'Segoe UI', Ubuntu, 'Helvetica Neue', Sans-Serif";
 
-export const HOST_LABELS: Record<ActivityHost, string> = { github: "GitHub", gitlab: "GitLab", manual: "Manual" };
-export const DEFAULT_HOST_COLORS: Record<ActivityHost, string> = { github: "#40c463", gitlab: "#fc6d26", manual: "#a855f7" };
+/** Compatibility defaults for activity created before source descriptors existed. */
+export const HOST_LABELS: Record<Host | "manual", string> = { github: "GitHub", gitlab: "GitLab", manual: "Manual" };
+export const DEFAULT_HOST_COLORS: Record<Host | "manual", string> = { github: "#40c463", gitlab: "#fc6d26", manual: "#a855f7" };
 
 /** Colour overrides, as hex with or without `#`. They apply in light and dark mode. */
 export interface ColorOverrides {

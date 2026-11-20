@@ -5,10 +5,10 @@ import { run } from "./run.ts";
 try {
   const config = readConfig((name) => {
     const value = core.getInput(name);
-    if (value && ["github-token", "gitlab-token", "gitlab-sources", "wakatime-api-key"].includes(name)) core.setSecret(value);
+    if (value && ["github-token", "gitlab-token", "gitlab-sources", "sources", "wakatime-api-key"].includes(name)) core.setSecret(value);
     return value;
   });
-  for (const token of [config.githubToken, config.gitlabToken, config.wakatime.apiKey, ...(config.gitlabSources ?? []).map((source) => source.token)]) {
+  for (const token of [config.githubToken, config.gitlabToken, config.wakatime.apiKey, ...(config.gitlabSources ?? []).map((source) => source.token), ...(config.sources ?? []).map((source) => source.token)]) {
     if (token) core.setSecret(token);
   }
   const result = await run(config, {

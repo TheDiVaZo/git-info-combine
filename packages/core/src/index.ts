@@ -1,5 +1,5 @@
 export { CARD_NAMES, parseCards, type CardName } from "./cards.ts";
-export { CACHE_VERSION, collect, parseCache, type Cache, type CollectOptions, type Collected } from "./collect.ts";
+export { CACHE_VERSION, collect, parseCache, type Cache, type SourceCache, type CollectOptions, type CollectDeps, type Collected } from "./collect.ts";
 export { combine } from "./combine.ts";
 export { validateManualContribution, parseManualContribution, manualSourceColor, type ManualContributionDocument } from "./manual.ts";
 export { fetchGitHub, type GitHubCache, type GitHubOptions } from "./github.ts";
@@ -8,6 +8,10 @@ export { HttpError } from "./http.ts";
 export * from "./model.ts";
 export { opaqueId, SensitiveNames } from "./privacy.ts";
 export { gitlabInstanceId, normalizeGitLabSources, parseGitLabSources, type GitLabSourceConfig } from "./sources.ts";
+export { normalizeSources, parseSources, resolveSources } from "./server-sources.ts";
+export { DEFAULT_PROVIDERS } from "./providers.ts";
+export { ProviderError, providerCacheKey, type ServerSourceConfig, type ResolvedServerSource, type SourceProvider, type ProviderRegistry, type ProviderContext, type ProviderResult } from "./provider.ts";
+export { fetchForgejo, detectForgejo, forgejoInstanceId, type ForgejoCache, type ForgejoOptions } from "./forgejo.ts";
 export * from "./render/index.ts";
 export { fetchGist, fetchPin, parseRef, type ShowcaseItem, type ShowcaseOptions } from "./showcase.ts";
 export { fetchWakaTime, WAKATIME_RANGES, type WakaTimeOptions, type WakaTimeRange, type WakaTimeStats } from "./wakatime.ts";

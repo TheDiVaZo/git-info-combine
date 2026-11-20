@@ -1,4 +1,5 @@
-import type { CombinedActivity } from "../model.ts";
+import type { CombinedActivity, LanguageStat } from "../model.ts";
+import { availabilityNote, resolveSources } from "./hosts.ts";
 import { LANGUAGE_COLORS } from "./language-colors.ts";
 import { escapeXml, renderFrame, titleOffset, type CardOptions } from "./svg.ts";
 
@@ -29,9 +30,24 @@ export function topLanguages(
   hide: string[] = [],
   weighting: "repo" | "size" = "repo",
 ): LanguageShare[] {
+  const sources = resolveSources(activity.hosts);
+  let languages = activity.languages;
+  if (sources.some((source) => !source.capabilities.languages)) {
+    languages = {};
+    activity.hosts.forEach((host, index) => {
+      if (!sources[index]!.capabilities.languages) return;
+      for (const [name, value] of Object.entries(host.languages)) {
+        const total: LanguageStat = languages[name] ??= { size: 0, weight: 0, repos: 0, color: value.color };
+        total.size += value.size;
+        total.weight += value.weight;
+        total.repos += value.repos;
+        total.color ??= value.color;
+      }
+    });
+  }
   const hidden = new Set(hide.map((name) => name.trim().toLowerCase()));
   const value = (stat: { size: number; weight: number }) => (weighting === "size" ? stat.size : stat.weight);
-  const top = Object.entries(activity.languages)
+  const top = Object.entries(languages)
     .filter(([name, stat]) => !hidden.has(name.toLowerCase()) && value(stat) > 0)
     .sort(([, a], [, b]) => value(b) - value(a))
     .slice(0, count);
@@ -47,13 +63,16 @@ export function renderLanguagesCard(activity: CombinedActivity, options: Languag
   const WIDTH = options.width ?? 300;
   const BAR_WIDTH = WIDTH - 50;
   const layout = options.layout ?? "normal";
+  const sources = resolveSources(activity.hosts);
+  const unavailable = sources.filter((source) => !source.capabilities.languages);
+  const noneReport = sources.length > 0 && unavailable.length === sources.length;
   const languages = topLanguages(activity, options.count ?? (layout === "compact" ? 6 : 5), options.hide, options.weighting);
   const top = titleOffset(options);
 
   let body: string;
   let height: number;
   if (languages.length === 0) {
-    body = `<text class="small" x="25" y="0">No languages found.</text>`;
+    body = `<text class="small" x="25" y="0">${noneReport ? "Languages not reported." : "No languages found."}</text>`;
     height = top + 30;
   } else if (layout === "compact") {
     let x = 0;
@@ -89,12 +108,16 @@ export function renderLanguagesCard(activity: CombinedActivity, options: Languag
     height = top + languages.length * 40 - 5;
   }
 
+  const note = availabilityNote(unavailable.length && !noneReport ? "Languages include reporting sources only." : "", 25, height - top + 5, BAR_WIDTH);
+  body += note.svg;
+  height += note.height;
   return renderFrame({
     ...options,
     width: WIDTH,
     height,
     title: "Most Used Languages",
-    description: languages.map((l) => `${l.name} ${l.percent.toFixed(2)}%`).join(", ") || "No languages found.",
+    description: (languages.map((l) => `${l.name} ${l.percent.toFixed(2)}%`).join(", ") || (noneReport ? "Languages not reported." : "No languages found."))
+      + (unavailable.length ? ` Sources without language statistics: ${unavailable.map((source) => source.label).join(", ")}.` : ""),
     body,
   });
 }

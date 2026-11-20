@@ -1,5 +1,5 @@
 name: Git-info-combine
-description: Combine GitHub and GitLab activity into profile README cards. Private work is counted; private names are never shown.
+description: Combine GitHub, GitLab, Forgejo and local Git activity into profile README cards. Private names are never shown.
 author: Kingpin Apps
 branding:
   icon: activity
@@ -10,8 +10,11 @@ inputs:
   github-token:
     description: Personal access token for the profile owner (classic, with repo, read:org and read:user). The default GITHUB_TOKEN cannot read your activity in other repos.
     required: false
+  sources:
+    description: "JSON array of servers with id, url, token, label and hex color. Optional provider selects gitlab or forgejo; omitted providers are detected through the API. Provider options go in options. Use instead of legacy GitLab credentials."
+    required: false
   gitlab-token:
-    description: GitLab personal access token with the read_api scope.
+    description: GitLab personal access token with read_api and read_user scopes. Legacy alternative to sources.
     required: false
   gitlab-url:
     description: Base URL of the GitLab instance. Set this for self-hosted GitLab.
@@ -21,7 +24,7 @@ inputs:
     description: "JSON array of GitLab servers, each with id, url, token, label and hex color; optional mirrors adds GitHub mirror project paths for that server. Labels appear publicly on cards. Use instead of gitlab-token."
     required: false
   gitlab-primary-source:
-    description: "The id in gitlab-sources used for GitLab pins and snippets. Required when those cards are requested with multiple servers; a single server is selected automatically."
+    description: "The GitLab source id in sources or gitlab-sources used for GitLab pins and snippets. Required when those cards are requested with multiple GitLab servers; a single GitLab server is selected automatically."
     required: false
   manual-contributions-dir:
     description: "Workspace-relative directory of manual contribution JSON files. Missing directories are ignored; invalid files fail the run. Can be used without API tokens."

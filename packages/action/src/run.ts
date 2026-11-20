@@ -62,7 +62,6 @@ interface Card {
 
 export async function run(config: Config, deps: RunDeps): Promise<RunResult> {
   const { logger } = deps;
-  const primaryGitLab = primaryGitLabSource(config);
   const manualSources = await loadManualContributions(deps.workspace, config.manualContributionsDir);
   const outputDir = join(deps.workspace, config.outputDir);
   const cachePath = join(outputDir, CACHE_FILE);
@@ -71,11 +70,12 @@ export async function run(config: Config, deps: RunDeps): Promise<RunResult> {
 
   // collect() has already checked that neither of these holds a private name.
   // The heatmap, stats and languages cards are drawn only from the activity.
-  const { activity, mirrored, cache: nextCache } = await (deps.collect ?? collect)({
+  const { activity, mirrored, cache: nextCache, sourceProviders } = await (deps.collect ?? collect)({
     githubToken: config.githubToken,
     gitlabToken: config.gitlabToken,
     gitlabUrl: config.gitlabUrl,
     gitlabSources: config.gitlabSources,
+    sources: config.sources,
     manualSources,
     includeOrgRepos: config.includeOrgRepos,
     excludeRepos: config.excludeRepos,
@@ -83,11 +83,13 @@ export async function run(config: Config, deps: RunDeps): Promise<RunResult> {
     detectWordPress: config.detectWordPress,
     cache,
   });
+  const primaryGitLab = primaryGitLabSource(config, sourceProviders);
   if (mirrored > 0) logger.info(`${mirrored} GitLab projects mirror GitHub repos and are counted once.`);
   for (const host of activity.hosts) {
-    const metric = host.host === "manual" ? "local commits" : "contributions";
+    const metric = host.source?.metric === "commits" ? (host.source.origin === "api" ? "commits" : "local commits") : "contributions";
+    const hasRepoCounts = host.source?.capabilities?.repos ?? host.host !== "manual";
     logger.info(
-      `${host.source?.label ?? host.host}: ${host.totals.contributions} ${metric}${host.host === "manual" ? "." : `, ${host.repos.public} public and ${host.repos.private} private repos.`}`,
+      `${host.source?.label ?? host.host}: ${host.totals.contributions} ${metric}${hasRepoCounts ? `, ${host.repos.public} public and ${host.repos.private} private repos.` : "."}`,
     );
   }
 

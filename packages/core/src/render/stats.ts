@@ -1,5 +1,5 @@
-import type { CombinedActivity, Totals } from "../model.ts";
-import { hostLegend, manualActivityDescription, resolveSources, sourceLegend, type HostColors } from "./hosts.ts";
+import { emptyTotals, type CombinedActivity, type Totals } from "../model.ts";
+import { activityDescription, availabilityNote, hostLegend, reportedTotal, resolveSources, sourceLegend, type HostColors } from "./hosts.ts";
 import { ICONS, type IconName } from "./icons.ts";
 import { calculateRank } from "./rank.ts";
 import { formatNumber, renderFrame, titleOffset, type CardOptions } from "./svg.ts";
@@ -28,28 +28,40 @@ export interface StatsCardOptions extends CardOptions {
 }
 
 const LINE_HEIGHT = 25;
+const RANK_METRICS = ["commits", "pullRequests", "issues", "reviews", "stars", "followers"] as const;
 
 export function renderStatsCard(activity: CombinedActivity, options: StatsCardOptions = {}): string {
-  const totals: Totals = activity.totals;
+  const sources = resolveSources(activity.hosts, options.hostColors);
+  const reported = (key: keyof Totals) => reportedTotal(activity.hosts, sources, key);
+  const totals = emptyTotals();
+  for (const key of Object.keys(totals) as (keyof Totals)[]) totals[key] = reported(key) ?? 0;
   const name = options.name ?? (activity.hosts.find((h) => h.host === "github") ?? activity.hosts.find((h) => h.login))?.login ?? "";
   const rows = STAT_NAMES.filter((stat) => !options.hide?.includes(stat));
-  const showRank = !options.hideRank;
+  const showRank = !options.hideRank && RANK_METRICS.every((key) => reported(key) !== undefined);
   const showHosts = options.showHosts !== false && activity.hosts.length > 0;
 
   const width = options.width ?? (showRank ? 450 : 300);
   const top = titleOffset(options);
   const rowsHeight = rows.length * LINE_HEIGHT;
-  const sourceAware = activity.hosts.some((host) => host.source || host.host === "manual");
+  const sourceAware = activity.hosts.some((host) => host.source) || sources.some((source) => source.origin === "local");
   const stackedRank = sourceAware && showRank && width < 400;
   const contentHeight = stackedRank ? rowsHeight + 100 : Math.max(rowsHeight, showRank ? 100 : 0);
-  const sources = resolveSources(activity.hosts, options.hostColors);
+  const displayedMetrics = [...rows, ...(showRank ? RANK_METRICS : [])];
+  const partial = sources.some((source) => displayedMetrics.some((key) => !source.capabilities.totals.includes(key)));
+  const legendSources = sources.map((source) => ({
+    ...source,
+    suffix: displayedMetrics.some((key) => !source.capabilities.totals.includes(key))
+      ? displayedMetrics.every((key) => !source.capabilities.totals.includes(key)) ? " (unavailable)" : " (partial)"
+      : undefined,
+  }));
   const legend = showHosts
     ? sourceAware
-      ? sourceLegend(sources, 25, contentHeight + 12, width - 50)
+      ? sourceLegend(legendSources, 25, contentHeight + 12, width - 50)
       : { ...hostLegend(activity.hosts.map((h) => h.host), options.hostColors ?? {}, 25, rowsHeight + 12), height: 22 }
     : { svg: "", height: 0 };
   const legendHeight = showHosts ? legend.height + 8 : 0;
-  const height = Math.max(top + (sourceAware ? contentHeight : rowsHeight) + legendHeight, showRank ? 175 : 0, options.minHeight ?? 0);
+  const note = availabilityNote(partial ? "— = not reported. Totals include reporting sources only." : "", 25, contentHeight + legendHeight + 8, width - 50);
+  const height = Math.max(top + (sourceAware ? contentHeight : rowsHeight) + legendHeight + note.height, showRank ? 175 : 0, options.minHeight ?? 0);
 
   const body: string[] = [];
   rows.forEach((stat, i) => {
@@ -59,7 +71,7 @@ export function renderStatsCard(activity: CombinedActivity, options: StatsCardOp
       `<g transform="translate(25 ${y})">`,
       `<svg class="icon" x="0" y="-13" viewBox="0 0 16 16" width="16" height="16">${ICONS[icon]}</svg>`,
       `<text class="text bold" x="25" y="0">${label}</text>`,
-      `<text class="text bold" x="185" y="0">${formatNumber(totals[stat], options.numberFormat)}</text>`,
+      `<text class="text bold" x="185" y="0">${reported(stat) === undefined ? "—" : formatNumber(totals[stat], options.numberFormat)}</text>`,
       `</g>`,
     );
   });
@@ -67,6 +79,7 @@ export function renderStatsCard(activity: CombinedActivity, options: StatsCardOp
   if (showHosts) {
     body.push(legend.svg);
   }
+  body.push(note.svg);
 
   let rankText = "";
   if (showRank) {
@@ -86,9 +99,10 @@ export function renderStatsCard(activity: CombinedActivity, options: StatsCardOp
     rankText = `, rank ${rank.level}`;
   }
 
-  const description = rows.map((stat) => `${ROWS[stat].label} ${totals[stat]}`).join(", ") + rankText
+  const description = rows.map((stat) => `${ROWS[stat].label} ${reported(stat) === undefined ? "not reported" : totals[stat]}`).join(", ") + rankText
     + (sourceAware && showHosts ? `. Sources: ${sources.map((source) => source.label).join(", ")}.` : "")
-    + manualActivityDescription(activity.hosts);
+    + (partial ? ` Totals${showRank ? " and rank" : ""} include reporting sources only.` : "")
+    + activityDescription(sources);
   return renderFrame({
     ...options,
     width,

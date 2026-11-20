@@ -3,13 +3,14 @@
  * environment: GIC_GITHUB_TOKEN, GIC_GITLAB_TOKEN, and optionally GIC_GITLAB_URL
  * and GIC_INCLUDE_ORG_REPOS=false. For multiple GitLab servers, use
  * GIC_GITLAB_SOURCES (the same JSON array as the Action's gitlab-sources)
- * instead of GIC_GITLAB_TOKEN.
+ * instead of GIC_GITLAB_TOKEN. Prefer GIC_SOURCES for mixed GitLab/Forgejo
+ * servers with optional provider autodetection; it replaces legacy GitLab inputs.
  * Writes the cache and activity JSON to .out/ so a second run is incremental.
  *
  *   bun run fetch
  */
 import { mkdir } from "node:fs/promises";
-import { collect, parseCache, parseGitLabSources } from "@git-info-combine/core";
+import { collect, parseCache, parseGitLabSources, parseSources } from "@git-info-combine/core";
 
 const cacheFile = Bun.file(".out/cache.json");
 const cache = parseCache((await cacheFile.exists()) ? await cacheFile.text() : null);
@@ -20,6 +21,7 @@ const { activity, mirrored, cache: next } = await collect({
   gitlabToken: process.env.GIC_GITLAB_TOKEN,
   gitlabUrl: process.env.GIC_GITLAB_URL,
   gitlabSources: parseGitLabSources(process.env.GIC_GITLAB_SOURCES),
+  sources: parseSources(process.env.GIC_SOURCES),
   includeOrgRepos: process.env.GIC_INCLUDE_ORG_REPOS !== "false",
   cache,
 });
@@ -34,8 +36,17 @@ console.log(`Fetched in ${seconds}s (${cache ? "incremental" : "full"}).`);
 console.log(`Days with activity: ${dates.length}, from ${dates[0]} to ${dates.at(-1)}`);
 console.log(`GitLab projects counted once as mirrors of GitHub repos: ${mirrored}`);
 console.table([
-  ...activity.hosts.map((host) => ({ source: host.source?.label ?? host.host, account: host.login, ...host.totals, ...prefix("repos", host.repos) })),
-  { source: "combined", account: "", ...activity.totals },
+  ...activity.hosts.map((host) => ({
+    source: host.source?.label ?? host.host,
+    account: host.login,
+    ...Object.fromEntries(Object.entries(host.totals).map(([key, value]) => [key,
+      host.source?.capabilities && !host.source.capabilities.totals.some((stat) => stat === key) ? "not reported" : value,
+    ])),
+    ...prefix("repos", host.source?.capabilities?.repos === false ? { public: "not reported", private: "not reported" } : host.repos),
+  })),
+  { source: "combined (reporting sources)", account: "", ...Object.fromEntries(Object.entries(activity.totals).map(([key, value]) => [key,
+    activity.hosts.some((host) => !host.source?.capabilities || host.source.capabilities.totals.some((stat) => stat === key)) ? value : "not reported",
+  ])) },
 ]);
 const totalWeight = Object.values(activity.languages).reduce((sum, stat) => sum + stat.weight, 0);
 const totalSize = Object.values(activity.languages).reduce((sum, stat) => sum + stat.size, 0);
@@ -50,6 +61,6 @@ const languages = Object.entries(activity.languages)
   }));
 console.table(languages);
 
-function prefix(name: string, record: Record<string, number>) {
+function prefix(name: string, record: Record<string, number | string>) {
   return Object.fromEntries(Object.entries(record).map(([key, value]) => [`${name}.${key}`, value]));
 }
